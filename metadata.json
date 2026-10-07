@@ -1,0 +1,7 @@
+{
+  "name": "Excel LiveSync Pro - Real-Time Excel & Spreadsheet Sync Engine",
+  "description": "Real-time bi-directional Excel & spreadsheet synchronization platform with live sheet editor, webhook integration, and auto-sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
