@@ -29,6 +29,7 @@ interface ViewSubmissionsModalProps {
   onResyncSubmission: (sub: InventorySubmission) => Promise<void>;
   onResyncAll: () => Promise<void>;
   isSyncing: boolean;
+  onViewRudraReport?: (sub: InventorySubmission) => void;
 }
 
 export const ViewSubmissionsModal: React.FC<ViewSubmissionsModalProps> = ({
@@ -40,6 +41,7 @@ export const ViewSubmissionsModal: React.FC<ViewSubmissionsModalProps> = ({
   onResyncSubmission,
   onResyncAll,
   isSyncing,
+  onViewRudraReport,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('ALL');
@@ -332,8 +334,19 @@ export const ViewSubmissionsModal: React.FC<ViewSubmissionsModalProps> = ({
                         <span>{sub.syncStatus}</span>
                       </span>
 
-                      {/* Quick Actions (Edit, Resync, Delete) */}
+                      {/* Quick Actions (View PDF Report, Edit, Resync, Delete) */}
                       <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                        {onViewRudraReport && (
+                          <button
+                            type="button"
+                            onClick={() => onViewRudraReport(sub)}
+                            className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-slate-850 rounded-lg transition"
+                            title="View / Print Official Rudra Transformer Report (PDF Format)"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => onResyncSubmission(sub)}

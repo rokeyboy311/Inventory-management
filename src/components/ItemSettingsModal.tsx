@@ -12,9 +12,10 @@ import {
   RotateCcw,
   Sparkles,
   HelpCircle,
-  Type
+  Type,
+  Zap
 } from 'lucide-react';
-import { InventoryItemDefinition, FieldType } from '../types/inventory';
+import { InventoryItemDefinition, FieldType, RUDRA_ELECTRICAL_18_ITEMS, STANDARD_5_ITEMS } from '../types/inventory';
 import { buildHierarchicalColumnLayout } from '../utils/excelExporter';
 
 interface ItemSettingsModalProps {
@@ -345,14 +346,26 @@ export const ItemSettingsModal: React.FC<ItemSettingsModalProps> = ({
 
         {/* Modal Footer */}
         <div className="px-6 py-4 border-t border-slate-800 bg-slate-950 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <button
-            type="button"
-            onClick={onResetToDefaults}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl transition cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset to Standard Defaults (Lug: 100, 200, 500)</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setItemsDraft(RUDRA_ELECTRICAL_18_ITEMS)}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-amber-950/50 hover:bg-amber-900/60 border border-amber-600/40 text-amber-300 font-bold rounded-xl transition cursor-pointer"
+              title="Load Rudra Electrical - 18 Items Transformer Maintenance Template"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Load Rudra Electrical (18 Items Template)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setItemsDraft(STANDARD_5_ITEMS)}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl transition cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset to Standard (5 Items)</span>
+            </button>
+          </div>
 
           <div className="flex items-center space-x-2">
             <button

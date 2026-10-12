@@ -160,6 +160,44 @@ export function buildHierarchicalExcelData(
 }
 
 /**
+ * Validates generated Excel Workbook before user download (Phase 37)
+ */
+export function validateExcelWorkbook(wb: XLSX.WorkBook): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!wb.SheetNames || wb.SheetNames.length === 0) {
+    errors.push('Workbook contains no sheets.');
+    return { valid: false, errors };
+  }
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    if (!ws) {
+      errors.push(`Sheet "${sheetName}" is missing or unreadable.`);
+      continue;
+    }
+
+    if (!ws['!ref']) {
+      errors.push(`Sheet "${sheetName}" has empty dimension reference.`);
+      continue;
+    }
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    if (range.e.c < 2) {
+      errors.push(`Sheet "${sheetName}" has fewer than minimum required columns.`);
+    }
+
+    // Verify row 1 and row 2 headers exist
+    const cellA1 = ws[XLSX.utils.encode_cell({ r: 0, c: 0 })];
+    if (!cellA1 || !cellA1.v) {
+      errors.push(`Sheet "${sheetName}" is missing primary header in A1.`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
  * Creates and downloads the exact 2-tier Hierarchical Merged Excel Workbook (.xlsx)
  */
 export function exportLocationExcelFile(
@@ -170,7 +208,7 @@ export function exportLocationExcelFile(
 ) {
   const activeItemDefs = itemDefinitions || defaultFallbackItemDefs;
   const cleanFolder = sanitizeFolderName(location);
-  const fileName = locationType === 'In house' ? `${cleanFolder}_In_House.xlsx` : `${cleanFolder}_Maintenance.xlsx`;
+  const fileName = locationType === 'In house' ? `${cleanFolder}_Inventory_Usage.xlsx` : `${cleanFolder}_Maintenance_Log.xlsx`;
   const wb = XLSX.utils.book_new();
 
   const { headerRow1, headerRow2, dataRows, merges } = buildHierarchicalExcelData(
@@ -185,10 +223,16 @@ export function exportLocationExcelFile(
   ws['!merges'] = merges;
 
   // Auto column widths
-  ws['!cols'] = headerRow1.map((_, i) => ({ wch: Math.max(12, String(headerRow2[i] || '').length + 4) }));
+  ws['!cols'] = headerRow1.map((_, i) => ({ wch: Math.max(14, String(headerRow2[i] || '').length + 4) }));
 
-  const sheetTitle = locationType === 'In house' ? 'In_House_Log' : 'Maintenance_Log';
+  const sheetTitle = locationType === 'In house' ? 'Inventory_Usage' : 'Maintenance_Log';
   XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
+
+  // Validate workbook safety before write
+  const validation = validateExcelWorkbook(wb);
+  if (!validation.valid) {
+    console.warn('[Excel Validation Warnings]:', validation.errors);
+  }
 
   XLSX.writeFile(wb, fileName);
 }
@@ -252,9 +296,9 @@ export async function exportSingleLocationFolderZIP(
   const wbInHouse = XLSX.utils.book_new();
   const wsInHouse = XLSX.utils.aoa_to_sheet([inHouseData.headerRow1, inHouseData.headerRow2, ...inHouseData.dataRows]);
   wsInHouse['!merges'] = inHouseData.merges;
-  XLSX.utils.book_append_sheet(wbInHouse, wsInHouse, 'In_House_Log');
+  XLSX.utils.book_append_sheet(wbInHouse, wsInHouse, 'Inventory_Usage');
   const bufInHouse = XLSX.write(wbInHouse, { type: 'array', bookType: 'xlsx' });
-  folder.file(`${cleanFolder}_In_House.xlsx`, bufInHouse);
+  folder.file(`${cleanFolder}_Inventory_Usage.xlsx`, bufInHouse);
 
   // 2. Maintenance File
   const maintData = buildHierarchicalExcelData(submissions, location, 'Maintenance', activeItemDefs);
@@ -263,7 +307,7 @@ export async function exportSingleLocationFolderZIP(
   wsMaint['!merges'] = maintData.merges;
   XLSX.utils.book_append_sheet(wbMaint, wsMaint, 'Maintenance_Log');
   const bufMaint = XLSX.write(wbMaint, { type: 'array', bookType: 'xlsx' });
-  folder.file(`${cleanFolder}_Maintenance.xlsx`, bufMaint);
+  folder.file(`${cleanFolder}_Maintenance_Log.xlsx`, bufMaint);
 
   const zipBlob = await zip.generateAsync({ type: 'blob' });
   const url = URL.createObjectURL(zipBlob);
@@ -298,9 +342,9 @@ export async function exportAllLocationFoldersZIP(
     const wbInHouse = XLSX.utils.book_new();
     const wsInHouse = XLSX.utils.aoa_to_sheet([inHouseData.headerRow1, inHouseData.headerRow2, ...inHouseData.dataRows]);
     wsInHouse['!merges'] = inHouseData.merges;
-    XLSX.utils.book_append_sheet(wbInHouse, wsInHouse, 'In_House_Log');
+    XLSX.utils.book_append_sheet(wbInHouse, wsInHouse, 'Inventory_Usage');
     const bufInHouse = XLSX.write(wbInHouse, { type: 'array', bookType: 'xlsx' });
-    folder.file(`${cleanFolder}_In_House.xlsx`, bufInHouse);
+    folder.file(`${cleanFolder}_Inventory_Usage.xlsx`, bufInHouse);
 
     // 2. Maintenance File
     const maintData = buildHierarchicalExcelData(submissions, loc, 'Maintenance', activeItemDefs);
@@ -309,7 +353,7 @@ export async function exportAllLocationFoldersZIP(
     wsMaint['!merges'] = maintData.merges;
     XLSX.utils.book_append_sheet(wbMaint, wsMaint, 'Maintenance_Log');
     const bufMaint = XLSX.write(wbMaint, { type: 'array', bookType: 'xlsx' });
-    folder.file(`${cleanFolder}_Maintenance.xlsx`, bufMaint);
+    folder.file(`${cleanFolder}_Maintenance_Log.xlsx`, bufMaint);
   }
 
   const zipBlob = await zip.generateAsync({ type: 'blob' });

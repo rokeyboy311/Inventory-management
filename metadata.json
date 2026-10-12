@@ -1,6 +1,6 @@
 {
-  "name": "Excel LiveSync Pro - Real-Time Excel & Spreadsheet Sync Engine",
-  "description": "Real-time bi-directional Excel & spreadsheet synchronization platform with live sheet editor, webhook integration, and auto-sync.",
+  "name": "Division Location Inventory & Material Consumption System",
+  "description": "Centralized inventory management and daily material consumption tracking for electrical work locations organized by Division → Sub-Division → Location with Volt-Amp readings and multi-user sync.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

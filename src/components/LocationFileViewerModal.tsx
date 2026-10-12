@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   Table,
   Layers,
-  LayoutGrid
+  LayoutGrid,
+  FileText
 } from 'lucide-react';
 import { InventorySubmission, InventoryItemDefinition } from '../types/inventory';
 import { 
@@ -30,6 +31,7 @@ interface LocationFileViewerModalProps {
   onDeleteSubmission: (id: string) => Promise<void>;
   onEditSubmission: (sub: InventorySubmission) => void;
   onAddEntryForThisFile: (location: string, type: 'In house' | 'Maintenance') => void;
+  onViewRudraReport?: (sub: InventorySubmission) => void;
 }
 
 export const LocationFileViewerModal: React.FC<LocationFileViewerModalProps> = ({
@@ -42,6 +44,7 @@ export const LocationFileViewerModal: React.FC<LocationFileViewerModalProps> = (
   onDeleteSubmission,
   onEditSubmission,
   onAddEntryForThisFile,
+  onViewRudraReport,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -108,6 +111,25 @@ export const LocationFileViewerModal: React.FC<LocationFileViewerModalProps> = (
           </div>
 
           <div className="flex items-center space-x-2">
+            {onViewRudraReport && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (matchedSubmissions.length > 0) {
+                    onViewRudraReport(matchedSubmissions[0]);
+                  } else {
+                    onClose();
+                    onAddEntryForThisFile(location, locationType);
+                  }
+                }}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition cursor-pointer shadow-md"
+                title="Generate Work Report PDF Firmo for this file"
+              >
+                <FileText className="w-3.5 h-3.5 text-amber-400" />
+                <span>📄 Generate Firmo</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => {
@@ -115,9 +137,10 @@ export const LocationFileViewerModal: React.FC<LocationFileViewerModalProps> = (
                 onAddEntryForThisFile(location, locationType);
               }}
               className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold transition cursor-pointer shadow-md"
+              title="Add a new entry or update records in this file"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Add Entry</span>
+              <span>+ Update / Add Entry</span>
             </button>
 
             <button
@@ -260,6 +283,16 @@ export const LocationFileViewerModal: React.FC<LocationFileViewerModalProps> = (
                       <td className="py-2 px-3 text-center whitespace-nowrap">
                         {parentSub && (
                           <div className="flex items-center justify-center space-x-1">
+                            {onViewRudraReport && (
+                              <button
+                                type="button"
+                                onClick={() => onViewRudraReport(parentSub)}
+                                className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                                title="View / Print Official Rudra Transformer Work Report (PDF Format)"
+                              >
+                                <FileSpreadsheet className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => onEditSubmission(parentSub)}

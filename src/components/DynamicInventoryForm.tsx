@@ -14,9 +14,13 @@ import {
   FileText,
   RefreshCw,
   LayoutGrid,
-  List
+  List,
+  ChevronDown,
+  ChevronUp,
+  FileCheck,
+  Building2
 } from 'lucide-react';
-import { InventoryItemDefinition } from '../types/inventory';
+import { InventoryItemDefinition, TransformerReportMeta } from '../types/inventory';
 
 interface DynamicInventoryFormProps {
   itemDefinitions: InventoryItemDefinition[];
@@ -34,6 +38,11 @@ interface DynamicInventoryFormProps {
   onRestoreDefaults?: () => void;
   notes: string;
   onNotesChange: (notes: string) => void;
+  activePreset?: 'rudra_18' | 'standard_5';
+  onSwitchPreset?: (preset: 'rudra_18' | 'standard_5') => void;
+  reportMeta?: TransformerReportMeta;
+  onReportMetaChange?: (meta: TransformerReportMeta) => void;
+  onOpenReportPreview?: () => void;
 }
 
 export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
@@ -48,25 +57,25 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
   onRestoreDefaults,
   notes,
   onNotesChange,
+  activePreset = 'rudra_18',
+  onSwitchPreset,
+  reportMeta,
+  onReportMetaChange,
+  onOpenReportPreview,
 }) => {
   // Toggle between multi-column sub-inputs vs single dropdown per item
   const [subOptionMode, setSubOptionMode] = useState<Record<string, 'grid' | 'dropdown'>>({});
+  const [isReportMetaExpanded, setIsReportMetaExpanded] = useState<boolean>(true);
 
   const getItemIcon = (id: string) => {
-    switch (id) {
-      case 'power':
-        return <Zap className="w-4 h-4 text-amber-400" />;
-      case 'earth_compaction':
-        return <Compass className="w-4 h-4 text-emerald-400" />;
-      case 'lug':
-        return <Sliders className="w-4 h-4 text-teal-400" />;
-      case 'box':
-        return <BoxIcon className="w-4 h-4 text-blue-400" />;
-      case 'cable':
-        return <CableIcon className="w-4 h-4 text-cyan-400" />;
-      default:
-        return <Layers className="w-4 h-4 text-purple-400" />;
-    }
+    if (id.includes('bushing')) return <Zap className="w-4 h-4 text-amber-400" />;
+    if (id.includes('oil') || id.includes('breather')) return <Compass className="w-4 h-4 text-cyan-400" />;
+    if (id.includes('lug') || id.includes('lugs')) return <Sliders className="w-4 h-4 text-teal-400" />;
+    if (id.includes('box')) return <BoxIcon className="w-4 h-4 text-blue-400" />;
+    if (id.includes('cable')) return <CableIcon className="w-4 h-4 text-cyan-400" />;
+    if (id.includes('earth')) return <Compass className="w-4 h-4 text-emerald-400" />;
+    if (id.includes('paint')) return <Sparkles className="w-4 h-4 text-pink-400" />;
+    return <Layers className="w-4 h-4 text-purple-400" />;
   };
 
   const toggleItemMode = (itemId: string) => {
@@ -76,9 +85,196 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
     }));
   };
 
+  const handleMetaFieldChange = (field: keyof TransformerReportMeta, val: string) => {
+    if (onReportMetaChange && reportMeta) {
+      onReportMetaChange({
+        ...reportMeta,
+        [field]: val
+      });
+    }
+  };
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden space-y-0">
       
+      {/* PRESET SWITCHER & FORMAT BANNER */}
+      <div className="px-5 py-3 bg-slate-950 border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-bold text-slate-300">Select Template Format:</span>
+          <div className="flex items-center space-x-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => onSwitchPreset && onSwitchPreset('rudra_18')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+                activePreset === 'rudra_18'
+                  ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-yellow-300" />
+              <span>Rudra Electrical (18 Items PDF Format)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onSwitchPreset && onSwitchPreset('standard_5')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+                activePreset === 'standard_5'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Standard (5 Items)</span>
+            </button>
+          </div>
+        </div>
+
+        {activePreset === 'rudra_18' && onOpenReportPreview && (
+          <button
+            type="button"
+            onClick={onOpenReportPreview}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-600/90 hover:bg-cyan-500 text-white font-bold text-xs shadow-md shadow-cyan-950/50 transition cursor-pointer"
+          >
+            <FileCheck className="w-3.5 h-3.5" />
+            <span>Print / View Official Report (PDF)</span>
+          </button>
+        )}
+      </div>
+
+      {/* TRANSFORMER WORK REPORT METADATA EXPANDABLE PANEL (For Rudra Electrical Format) */}
+      {activePreset === 'rudra_18' && reportMeta && (
+        <div className="border-b border-slate-800 bg-slate-950/70 p-4 sm:p-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide uppercase flex items-center gap-2">
+                  <span>RUDRA ELECTRICAL — Work Report Header Details</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono normal-case">
+                    PDF Performa
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Work Order, Transformer Rating, Make, Serial No. &amp; Division Info
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsReportMetaExpanded(!isReportMetaExpanded)}
+              className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900 transition cursor-pointer"
+            >
+              {isReportMetaExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {isReportMetaExpanded && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4 text-xs">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Work Description:</label>
+                <input
+                  type="text"
+                  value={reportMeta.workName || ''}
+                  onChange={(e) => handleMetaFieldChange('workName', e.target.value)}
+                  placeholder="Transformer Maintenance Work"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Division / Sub-division:</label>
+                <input
+                  type="text"
+                  value={reportMeta.division || ''}
+                  onChange={(e) => handleMetaFieldChange('division', e.target.value)}
+                  placeholder="O&M Sub-Division"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">W.O. Number &amp; Date:</label>
+                <input
+                  type="text"
+                  value={reportMeta.workOrderNo || ''}
+                  onChange={(e) => handleMetaFieldChange('workOrderNo', e.target.value)}
+                  placeholder="W.O./TRANS/2026/089"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Transformer Capacity (KVA):</label>
+                <select
+                  value={reportMeta.transformerRating || '100 KVA'}
+                  onChange={(e) => handleMetaFieldChange('transformerRating', e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="10 KVA">10 KVA</option>
+                  <option value="16 KVA">16 KVA</option>
+                  <option value="25 KVA">25 KVA</option>
+                  <option value="63 KVA">63 KVA</option>
+                  <option value="100 KVA">100 KVA</option>
+                  <option value="160 KVA">160 KVA</option>
+                  <option value="200 KVA">200 KVA</option>
+                  <option value="250 KVA">250 KVA</option>
+                  <option value="315 KVA">315 KVA</option>
+                  <option value="500 KVA">500 KVA</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Make / Manufacturer:</label>
+                <input
+                  type="text"
+                  value={reportMeta.transformerMake || ''}
+                  onChange={(e) => handleMetaFieldChange('transformerMake', e.target.value)}
+                  placeholder="Voltamp / Crompton"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Serial Number (Sr. No.):</label>
+                <input
+                  type="text"
+                  value={reportMeta.transformerSerialNo || ''}
+                  onChange={(e) => handleMetaFieldChange('transformerSerialNo', e.target.value)}
+                  placeholder="TR-78420-GUJ"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Voltage Ratio:</label>
+                <input
+                  type="text"
+                  value={reportMeta.voltageRatio || '11 / 0.433 kV'}
+                  onChange={(e) => handleMetaFieldChange('voltageRatio', e.target.value)}
+                  placeholder="11 / 0.433 kV"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Performa / Report No:</label>
+                <input
+                  type="text"
+                  value={reportMeta.reportNo || ''}
+                  onChange={(e) => handleMetaFieldChange('reportNo', e.target.value)}
+                  placeholder="RE/TR/101"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table Title & Quick Tools Bar */}
       <div className="px-5 py-3.5 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center space-x-2.5">
@@ -87,10 +283,12 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
           </div>
           <div>
             <h2 className="text-sm font-bold text-white tracking-wide">
-              Dynamic Inventory Material Entry Table
+              {activePreset === 'rudra_18' ? '18 Items Work & Material Schedule (Rudra Performa)' : 'Dynamic Inventory Material Entry Table'}
             </h2>
             <p className="text-[11px] text-slate-400">
-              Tailored input fields per material specifications ({itemDefinitions.length} active rows)
+              {activePreset === 'rudra_18' 
+                ? 'Enter quantity used and specification / selected options for each maintenance task'
+                : `Tailored input fields per material specifications (${itemDefinitions.length} active rows)`}
             </p>
           </div>
         </div>
@@ -102,7 +300,7 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
               type="button"
               onClick={onRestoreDefaults}
               className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-slate-850 hover:bg-slate-800 text-slate-300 border border-slate-700 font-medium transition cursor-pointer"
-              title="Restore standard 5 default rows (Power, Earth Compaction, Lug: 100/200/500, Box, Cable)"
+              title="Reset rows to current template defaults"
             >
               <RefreshCw className="w-3 h-3 text-cyan-400" />
               <span className="hidden sm:inline">Reset Rows</span>

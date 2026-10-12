@@ -3,6 +3,22 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
+import { DatabaseStore } from './src/server/db.js';
+import { GoogleCloudIntegration } from './src/server/googleIntegration.js';
+import { 
+  Division, 
+  SubDivision, 
+  Location, 
+  Transformer, 
+  Material, 
+  DailyEntry, 
+  DailyEntryItem, 
+  TransformerReading, 
+  StockTransaction, 
+  BillRecord,
+  InventorySubmission,
+  InventoryItemValue
+} from './src/types/inventory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,301 +29,14 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// -------------------------------------------------------------
-// Type Definitions for Location-Based Inventory Files
-// -------------------------------------------------------------
-export interface InventoryItemValue {
-  itemId: string;
-  itemName: string;
-  fieldType: 'input_only' | 'dropdown_only' | 'dual';
-  value: string | number;
-  selectedType?: string | null;
-  unit?: string;
-  optionValues?: Record<string, string | number>;
-}
-
-export interface InventorySubmission {
-  id: string;
-  timestamp: string;
-  location: string;
-  locationType: 'In house' | 'Maintenance';
-  submittedBy: string;
-  notes?: string;
-  syncStatus: 'Synced' | 'Pending' | 'Offline Queued' | 'Error';
-  items: InventoryItemValue[];
-}
-
-// In-Memory Database with pre-populated locations
-let inventorySubmissions: InventorySubmission[] = [
-  {
-    id: 'INV-20261007-001',
-    timestamp: '2026-10-07T08:30:00.000Z',
-    location: 'Site A - Main Substation',
-    locationType: 'In house',
-    submittedBy: 'Rajesh Patel (Lead Electrical)',
-    notes: 'Primary transformer installation check',
-    syncStatus: 'Synced',
-    items: [
-      { itemId: 'power', itemName: 'Power', fieldType: 'input_only', value: '450 kW' },
-      { itemId: 'earth_compaction', itemName: 'Earth Compaction', fieldType: 'input_only', value: '1' },
-      { itemId: 'lug', itemName: 'Lug', fieldType: 'dual', value: 35, selectedType: 'Ring - Copper 70mm' },
-      { itemId: 'box', itemName: 'Box', fieldType: 'input_only', value: '12 Junction Boxes' },
-      { itemId: 'cable', itemName: 'Cable', fieldType: 'dual', value: 120, selectedType: 'Armoured 4-Core 16 sq mm' }
-    ]
-  },
-  {
-    id: 'INV-20261007-002',
-    timestamp: '2026-10-07T10:15:00.000Z',
-    location: 'Warehouse 1 - Central Depot',
-    locationType: 'Maintenance',
-    submittedBy: 'Vikram Singh (Maintenance Tech)',
-    notes: 'Feeder line circuit repair and ground check',
-    syncStatus: 'Synced',
-    items: [
-      { itemId: 'power', itemName: 'Power', fieldType: 'input_only', value: '230 V' },
-      { itemId: 'earth_compaction', itemName: 'Earth Compaction', fieldType: 'input_only', value: '1' },
-      { itemId: 'lug', itemName: 'Lug', fieldType: 'dual', value: 18, selectedType: 'Pin - Brass 25mm' },
-      { itemId: 'box', itemName: 'Box', fieldType: 'input_only', value: '4 Terminal Boxes' },
-      { itemId: 'cable', itemName: 'Cable', fieldType: 'dual', value: 45, selectedType: '2.5 sq mm Flexible' }
-    ]
-  },
-  {
-    id: 'INV-20261007-003',
-    timestamp: '2026-10-07T11:45:00.000Z',
-    location: 'Site B - Generator Room',
-    locationType: 'In house',
-    submittedBy: 'Anand Kumar (Field Engineer)',
-    notes: 'Auxiliary backup generator wiring test',
-    syncStatus: 'Synced',
-    items: [
-      { itemId: 'power', itemName: 'Power', fieldType: 'input_only', value: '380 V 3-Phase' },
-      { itemId: 'earth_compaction', itemName: 'Earth Compaction', fieldType: 'input_only', value: '2' },
-      { itemId: 'lug', itemName: 'Lug', fieldType: 'dual', value: 24, selectedType: 'Fork - Heavy Duty' },
-      { itemId: 'box', itemName: 'Box', fieldType: 'input_only', value: '6 Weatherproof Enclosures' },
-      { itemId: 'cable', itemName: 'Cable', fieldType: 'dual', value: 90, selectedType: '10 sq mm Armoured' }
-    ]
-  },
-  {
-    id: 'INV-20261006-004',
-    timestamp: '2026-10-06T15:20:00.000Z',
-    location: 'Project Alpha - Tower C',
-    locationType: 'Maintenance',
-    submittedBy: 'Neha Sharma (QC Inspector)',
-    notes: 'Routine earthing inspection and grounding replacement',
-    syncStatus: 'Synced',
-    items: [
-      { itemId: 'power', itemName: 'Power', fieldType: 'input_only', value: '110 V DC' },
-      { itemId: 'earth_compaction', itemName: 'Earth Compaction', fieldType: 'input_only', value: '1' },
-      { itemId: 'lug', itemName: 'Lug', fieldType: 'dual', value: 50, selectedType: 'Ring - Heavy Duty 95mm' },
-      { itemId: 'box', itemName: 'Box', fieldType: 'input_only', value: '8 Push Button Boxes' },
-      { itemId: 'cable', itemName: 'Cable', fieldType: 'dual', value: 160, selectedType: '6 sq mm Copper' }
-    ]
-  }
-];
-
-// Helper to format Location and File Names
-export function sanitizeFolderName(location: string): string {
-  return location.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
-}
-
-// Standard default item definitions for server-side exports
-const defaultServerItemDefs = [
-  { id: 'power', name: 'Power', fieldType: 'input_only' },
-  { id: 'earth_compaction', name: 'Earth Compaction', fieldType: 'input_only', defaultValue: '1' },
-  { id: 'lug', name: 'Lug', fieldType: 'dual', options: ['100', '200', '500'] },
-  { id: 'box', name: 'Box', fieldType: 'input_only' },
-  { id: 'cable', name: 'Cable', fieldType: 'dual', options: ['1.5 sq mm', '2.5 sq mm', '4 sq mm', 'Armoured'] }
-];
-
-export interface ServerColumnLayout {
-  itemId?: string;
-  itemName?: string;
-  subOption?: string;
-  headerLevel1: string;
-  headerLevel2: string;
-}
-
-export function buildServerHierarchicalColumnLayout(itemDefs = defaultServerItemDefs): ServerColumnLayout[] {
-  const layout: ServerColumnLayout[] = [
-    { headerLevel1: 'Entry_ID', headerLevel2: 'ID' },
-    { headerLevel1: 'Timestamp', headerLevel2: 'Date / Time' }
-  ];
-
-  for (const item of itemDefs) {
-    if (item.options && item.options.length > 0) {
-      for (const opt of item.options) {
-        layout.push({
-          itemId: item.id,
-          itemName: item.name,
-          subOption: opt,
-          headerLevel1: item.name,
-          headerLevel2: opt
-        });
-      }
-    } else {
-      layout.push({
-        itemId: item.id,
-        itemName: item.name,
-        headerLevel1: item.name,
-        headerLevel2: 'Value'
-      });
-    }
-  }
-
-  layout.push(
-    { headerLevel1: 'Submitted_By', headerLevel2: 'User' },
-    { headerLevel1: 'Notes', headerLevel2: 'Remarks' },
-    { headerLevel1: 'Sync_Status', headerLevel2: 'Status' }
-  );
-
-  return layout;
-}
-
-export function generateHierarchicalExcelData(location: string, locationType: 'In house' | 'Maintenance') {
-  const matched = inventorySubmissions.filter(
-    s => s.location.toLowerCase() === location.toLowerCase() && s.locationType === locationType
-  );
-
-  const columnLayout = buildServerHierarchicalColumnLayout();
-  const headerRow1 = columnLayout.map(c => c.headerLevel1);
-  const headerRow2 = columnLayout.map(c => c.headerLevel2);
-
-  // Merges calculation
-  const merges: XLSX.Range[] = [];
-  let colIdx = 0;
-  while (colIdx < columnLayout.length) {
-    const currentH1 = columnLayout[colIdx].headerLevel1;
-    let endCol = colIdx;
-    while (endCol + 1 < columnLayout.length && columnLayout[endCol + 1].headerLevel1 === currentH1) {
-      endCol++;
-    }
-    if (endCol > colIdx) {
-      merges.push({ s: { r: 0, c: colIdx }, e: { r: 0, c: endCol } });
-    } else {
-      merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
-    }
-    colIdx = endCol + 1;
-  }
-
-  const dataRows: (string | number)[][] = [];
-
-  for (const sub of matched) {
-    const row: (string | number)[] = [];
-    const itemValueMap = new Map(sub.items.map(it => [it.itemId, it]));
-
-    for (const col of columnLayout) {
-      if (col.headerLevel1 === 'Entry_ID') {
-        row.push(sub.id);
-      } else if (col.headerLevel1 === 'Timestamp') {
-        row.push(new Date(sub.timestamp).toLocaleString());
-      } else if (col.headerLevel1 === 'Submitted_By') {
-        row.push(sub.submittedBy || 'Site Personnel');
-      } else if (col.headerLevel1 === 'Notes') {
-        row.push(sub.notes || '');
-      } else if (col.headerLevel1 === 'Sync_Status') {
-        row.push(sub.syncStatus);
-      } else if (col.itemId) {
-        const itemVal = itemValueMap.get(col.itemId);
-        if (!itemVal) {
-          row.push('');
-          continue;
-        }
-
-        if (col.subOption) {
-          if (itemVal.optionValues && itemVal.optionValues[col.subOption] !== undefined && itemVal.optionValues[col.subOption] !== '') {
-            row.push(itemVal.optionValues[col.subOption]);
-          } else if (itemVal.selectedType && itemVal.selectedType.toLowerCase() === col.subOption.toLowerCase()) {
-            row.push(itemVal.value !== undefined ? itemVal.value : '');
-          } else {
-            row.push('');
-          }
-        } else {
-          row.push(itemVal.value !== undefined ? itemVal.value : '');
-        }
-      } else {
-        row.push('');
-      }
-    }
-
-    dataRows.push(row);
-  }
-
-  return { headerRow1, headerRow2, dataRows, columnLayout, merges, matched };
-}
-
-/**
- * Generates Excel rows for a specific Location and Type with Item Name as primary column.
- * Column Mapping: Item_Name | Value_Entered | Item_Type_Selected | Timestamp | Submitted_By | Entry_ID | Notes | Sync_Status
- */
-export function generateLocationSpecificExcelRows(location: string, locationType: 'In house' | 'Maintenance') {
-  return generateHierarchicalExcelData(location, locationType);
-}
-
-export function generateItemMasterRegisterRows(location: string, locationType: 'In house' | 'Maintenance') {
-  const headers = [
-    'Item_Name',
-    'Total_Logged_Count',
-    'Total_Numeric_Qty',
-    'Latest_Value',
-    'Latest_Type_Selected',
-    'Last_Updated',
-    'Last_Submitted_By'
-  ];
-
-  const matched = inventorySubmissions.filter(
-    s => s.location.toLowerCase() === location.toLowerCase() && s.locationType === locationType
-  );
-
-  const itemMap = new Map<string, { count: number; numericSum: number; hasNumeric: boolean; latestVal: string | number; latestType: string; lastDate: string; lastBy: string }>();
-
-  const standardOrder = ['Power', 'Earth Compaction', 'Lug', 'Box', 'Cable'];
-  for (const name of standardOrder) {
-    itemMap.set(name, { count: 0, numericSum: 0, hasNumeric: false, latestVal: '-', latestType: '-', lastDate: '-', lastBy: '-' });
-  }
-
-  const sorted = [...matched].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-  for (const sub of sorted) {
-    for (const item of sub.items) {
-      if (!itemMap.has(item.itemName)) {
-        itemMap.set(item.itemName, { count: 0, numericSum: 0, hasNumeric: false, latestVal: '-', latestType: '-', lastDate: '-', lastBy: '-' });
-      }
-      const cur = itemMap.get(item.itemName)!;
-      cur.count += 1;
-      cur.latestVal = item.value !== '' && item.value !== undefined ? item.value : cur.latestVal;
-      cur.latestType = item.selectedType || cur.latestType;
-      cur.lastDate = new Date(sub.timestamp).toLocaleString();
-      cur.lastBy = sub.submittedBy;
-
-      const num = Number(item.value);
-      if (!isNaN(num) && item.value !== '') {
-        cur.numericSum += num;
-        cur.hasNumeric = true;
-      }
-    }
-  }
-
-  const rows: (string | number)[][] = [];
-  for (const [name, data] of itemMap.entries()) {
-    rows.push([
-      name,
-      data.count,
-      data.hasNumeric ? data.numericSum : '-',
-      data.latestVal,
-      data.latestType,
-      data.lastDate,
-      data.lastBy
-    ]);
-  }
-
-  return { headers, rows };
-}
+// Initialize persistent database
+DatabaseStore.initialize();
 
 // SSE Connected Clients set
 const sseClients = new Set<Response>();
 
-function broadcastSync(data: unknown, eventType: string = 'inventory_sync') {
-  const payload = JSON.stringify({ type: eventType, data });
+export function broadcastSync(payloadData: unknown, eventType: string = 'inventory_sync') {
+  const payload = JSON.stringify({ type: eventType, data: payloadData, timestamp: new Date().toISOString() });
   for (const client of sseClients) {
     try {
       client.write(`data: ${payload}\n\n`);
@@ -317,69 +46,1118 @@ function broadcastSync(data: unknown, eventType: string = 'inventory_sync') {
   }
 }
 
+// Helper to sanitize folder name
+export function sanitizeFolderName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
+}
+
 // -------------------------------------------------------------
-// REST Endpoints
+// Excel Export Helpers (Preserving Hierarchical Merged Headers)
+// -------------------------------------------------------------
+export function generateLocationUsageExcel(locationId: string) {
+  const db = DatabaseStore.get();
+  const loc = db.locations.find(l => l.id === locationId || l.name.toLowerCase() === locationId.toLowerCase());
+  const locName = loc ? loc.name : locationId;
+  const entries = db.dailyEntries.filter(e => e.locationId === loc?.id || e.locationId === locationId);
+
+  // Reference Sheet 1 style column structure
+  const headersRow1 = [
+    'SR NO',
+    'Location of TC',
+    'TC Serial Number',
+    'Date',
+    'Type',
+    'Replacement of bushing goti',
+    'Replacement of bushing goti',
+    'Providing LT side AL. Patta KVA',
+    'Check and Tight Earth Connection',
+    'Replacement of LT damaged cable',
+    'Replacement of LT damaged cable',
+    'Providing of new termination R,Y,B,N',
+    'Providing of new termination R,Y,B,N',
+    'Half Stud',
+    'Silica Gel / Breather',
+    'Remarks',
+    'Entered By'
+  ];
+
+  const headersRow2 = [
+    'No.',
+    'Site Name',
+    'TC No.',
+    'Date',
+    'Category',
+    'HT',
+    'LT',
+    '100 KVA',
+    'Nos.',
+    'C-1(70)',
+    'C-2(150)',
+    '70',
+    '150',
+    'M.S.',
+    'Kg',
+    'Notes',
+    'User'
+  ];
+
+  const merges: XLSX.Range[] = [
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+    { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
+    { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } },
+    { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } }, // Bushing HT/LT
+    { s: { r: 0, c: 7 }, e: { r: 1, c: 7 } },
+    { s: { r: 0, c: 8 }, e: { r: 1, c: 8 } },
+    { s: { r: 0, c: 9 }, e: { r: 0, c: 10 } }, // Cable 70/150
+    { s: { r: 0, c: 11 }, e: { r: 0, c: 12 } }, // Termination 70/150
+    { s: { r: 0, c: 13 }, e: { r: 1, c: 13 } },
+    { s: { r: 0, c: 14 }, e: { r: 1, c: 14 } },
+    { s: { r: 0, c: 15 }, e: { r: 1, c: 15 } },
+    { s: { r: 0, c: 16 }, e: { r: 1, c: 16 } }
+  ];
+
+  const dataRows: (string | number)[][] = [];
+
+  entries.forEach((entry, idx) => {
+    const tc = db.transformers.find(t => t.id === entry.transformerId);
+    const itemMap = new Map<string, number>();
+
+    entry.items.forEach(it => {
+      const key = `${it.materialId}:${it.variantName || ''}`.toLowerCase();
+      itemMap.set(key, (itemMap.get(key) || 0) + it.quantity);
+      itemMap.set(it.materialId.toLowerCase(), (itemMap.get(it.materialId.toLowerCase()) || 0) + it.quantity);
+    });
+
+    dataRows.push([
+      idx + 1,
+      locName,
+      tc ? tc.serialNumber : 'General TC',
+      entry.entryDate,
+      entry.locationType,
+      itemMap.get('mat-bushing:ht') || itemMap.get('bushing:ht') || '',
+      itemMap.get('mat-bushing:lt') || itemMap.get('bushing:lt') || '',
+      itemMap.get('mat-al-patta:100 kva') || itemMap.get('mat-al-patta') || '',
+      itemMap.get('mat-earth:tighten & test') || itemMap.get('mat-earth') || '',
+      itemMap.get('mat-cable:c-1 (70 sq mm)') || itemMap.get('mat-cable:70') || '',
+      itemMap.get('mat-cable:c-2 (150 sq mm)') || itemMap.get('mat-cable:150') || '',
+      itemMap.get('mat-termination:70 sq mm (4-core)') || '',
+      itemMap.get('mat-termination:150 sq mm (4-core)') || '',
+      itemMap.get('mat-stud:standard m.s.') || itemMap.get('mat-stud') || '',
+      itemMap.get('mat-breather:silica gel replenish') || itemMap.get('mat-breather') || '',
+      entry.remarks || '',
+      entry.enteredBy
+    ]);
+  });
+
+  return { headersRow1, headersRow2, merges, dataRows, locName };
+}
+
+export function generateLocationReadingsExcel(locationId: string) {
+  const db = DatabaseStore.get();
+  const loc = db.locations.find(l => l.id === locationId || l.name.toLowerCase() === locationId.toLowerCase());
+  const locName = loc ? loc.name : locationId;
+  const readings = db.transformerReadings.filter(r => r.locationId === loc?.id || r.locationId === locationId);
+
+  const headersRow1 = [
+    'Sr. no.',
+    'Location',
+    'Make',
+    'TC Serial No.',
+    'Capacity',
+    'Date / Time',
+    'Voltage',
+    'Voltage',
+    'Voltage',
+    'Ampere',
+    'Ampere',
+    'Ampere',
+    'Ampere',
+    'Entered By',
+    'Remark'
+  ];
+
+  const headersRow2 = [
+    'No.',
+    'Site',
+    'Make',
+    'Serial',
+    'KVA',
+    'Timestamp',
+    'RN',
+    'YN',
+    'BN',
+    'R',
+    'Y',
+    'B',
+    'N',
+    'Technician',
+    'Status'
+  ];
+
+  const merges: XLSX.Range[] = [
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+    { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
+    { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } },
+    { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } },
+    { s: { r: 0, c: 6 }, e: { r: 0, c: 8 } },  // Voltage RN, YN, BN
+    { s: { r: 0, c: 9 }, e: { r: 0, c: 12 } }, // Ampere R, Y, B, N
+    { s: { r: 0, c: 13 }, e: { r: 1, c: 13 } },
+    { s: { r: 0, c: 14 }, e: { r: 1, c: 14 } }
+  ];
+
+  const dataRows: (string | number)[][] = readings.map((r, i) => [
+    i + 1,
+    r.locationName,
+    r.transformerMake,
+    r.transformerSerial,
+    r.transformerCapacity,
+    `${r.readingDate} ${r.readingTime || ''}`.trim(),
+    r.voltageRN,
+    r.voltageYN,
+    r.voltageBN,
+    r.ampereR,
+    r.ampereY,
+    r.ampereB,
+    r.ampereN,
+    r.enteredBy,
+    r.remarks || ''
+  ]);
+
+  return { headersRow1, headersRow2, merges, dataRows, locName };
+}
+
+// -------------------------------------------------------------
+// REST API Endpoints
 // -------------------------------------------------------------
 
-// Health check
+// 1. Health check & system overview
 app.get('/api/health', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    totalSubmissions: inventorySubmissions.length,
+    divisions: db.divisions.length,
+    subdivisions: db.subdivisions.length,
+    locations: db.locations.length,
+    transformers: db.transformers.length,
+    materials: db.materials.length,
+    dailyEntries: db.dailyEntries.length,
+    transformerReadings: db.transformerReadings.length,
     connectedClients: sseClients.size
   });
 });
 
-// GET all inventory entries
-app.get('/api/inventory/entries', (_req: Request, res: Response) => {
+// 2. Divisions Management
+app.get('/api/divisions', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, divisions: db.divisions });
+});
+
+app.post('/api/divisions', (req: Request, res: Response) => {
+  try {
+    const { name, code, status } = req.body;
+    if (!name || !code) {
+      return res.status(400).json({ success: false, error: 'Division name and code are required.' });
+    }
+
+    const db = DatabaseStore.get();
+    const existing = db.divisions.find(d => d.name.trim().toLowerCase() === String(name).trim().toLowerCase());
+    if (existing) {
+      return res.status(409).json({ success: false, error: `Division "${name}" already exists.` });
+    }
+
+    const newDivision: Division = {
+      id: `div-${Date.now()}`,
+      name: String(name).trim().toUpperCase(),
+      code: String(code).trim().toUpperCase(),
+      status: status === 'inactive' ? 'inactive' : 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.divisions.push(newDivision);
+    DatabaseStore.saveToDisk();
+    DatabaseStore.logAudit(req.body.user || 'Admin', 'CREATE_DIVISION', 'Division', newDivision.id, null, newDivision);
+    broadcastSync(newDivision, 'DIVISION_CREATED');
+
+    return res.status(201).json({ success: true, division: newDivision });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+app.put('/api/divisions/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = DatabaseStore.get();
+  const div = db.divisions.find(d => d.id === id);
+  if (!div) return res.status(404).json({ success: false, error: 'Division not found' });
+
+  const old = { ...div };
+  if (req.body.name) div.name = String(req.body.name).trim().toUpperCase();
+  if (req.body.code) div.code = String(req.body.code).trim().toUpperCase();
+  if (req.body.status) div.status = req.body.status;
+  div.updatedAt = new Date().toISOString();
+
+  DatabaseStore.saveToDisk();
+  DatabaseStore.logAudit(req.body.user || 'Admin', 'UPDATE_DIVISION', 'Division', div.id, old, div);
+  broadcastSync(div, 'DIVISION_UPDATED');
+
+  res.json({ success: true, division: div });
+});
+
+// 3. Sub-Divisions Management
+app.get('/api/subdivisions', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, subdivisions: db.subdivisions });
+});
+
+app.post('/api/subdivisions', (req: Request, res: Response) => {
+  try {
+    const { divisionId, name, code, status } = req.body;
+    if (!divisionId || !name || !code) {
+      return res.status(400).json({ success: false, error: 'divisionId, name and code are required.' });
+    }
+
+    const db = DatabaseStore.get();
+    const parentDiv = db.divisions.find(d => d.id === divisionId);
+    if (!parentDiv) {
+      return res.status(404).json({ success: false, error: 'Parent Division does not exist.' });
+    }
+
+    const existing = db.subdivisions.find(s => s.divisionId === divisionId && s.name.trim().toLowerCase() === String(name).trim().toLowerCase());
+    if (existing) {
+      return res.status(409).json({ success: false, error: `Sub-Division "${name}" already exists in this Division.` });
+    }
+
+    const newSub: SubDivision = {
+      id: `sub-${Date.now()}`,
+      divisionId,
+      name: String(name).trim().toUpperCase(),
+      code: String(code).trim().toUpperCase(),
+      status: status === 'inactive' ? 'inactive' : 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.subdivisions.push(newSub);
+    DatabaseStore.saveToDisk();
+    DatabaseStore.logAudit(req.body.user || 'Admin', 'CREATE_SUBDIVISION', 'SubDivision', newSub.id, null, newSub);
+    broadcastSync(newSub, 'SUBDIVISION_CREATED');
+
+    return res.status(201).json({ success: true, subdivision: newSub });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// 4. Locations Management
+app.get('/api/locations', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, locations: db.locations });
+});
+
+app.post('/api/locations', (req: Request, res: Response) => {
+  try {
+    const { divisionId, subdivisionId, name, code, address, status } = req.body;
+    if (!subdivisionId || !name) {
+      return res.status(400).json({ success: false, error: 'subdivisionId and name are required.' });
+    }
+
+    const db = DatabaseStore.get();
+    const sub = db.subdivisions.find(s => s.id === subdivisionId);
+    if (!sub) return res.status(404).json({ success: false, error: 'Sub-Division does not exist.' });
+
+    const parentDivId = divisionId || sub.divisionId;
+    const existing = db.locations.find(l => l.subdivisionId === subdivisionId && l.name.trim().toLowerCase() === String(name).trim().toLowerCase());
+    if (existing) {
+      return res.status(409).json({ success: false, error: `Location "${name}" already exists in this Sub-Division.` });
+    }
+
+    const newLoc: Location = {
+      id: `loc-${Date.now()}`,
+      divisionId: parentDivId,
+      subdivisionId,
+      name: String(name).trim().toUpperCase(),
+      code: code ? String(code).trim().toUpperCase() : `LOC-${Math.floor(10 + Math.random() * 90)}`,
+      address: address ? String(address).trim() : undefined,
+      status: status === 'inactive' ? 'inactive' : 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.locations.push(newLoc);
+
+    // Register 2 files in FileRegistry for this new location
+    const cleanFolder = sanitizeFolderName(newLoc.name);
+    db.fileRegistry.push({
+      id: `file-inv-${newLoc.id}`,
+      divisionId: newLoc.divisionId,
+      subdivisionId: newLoc.subdivisionId,
+      locationId: newLoc.id,
+      locationName: newLoc.name,
+      fileType: 'inventory_usage',
+      fileName: `${cleanFolder}_Inventory_Usage.xlsx`,
+      lastSyncedAt: newLoc.createdAt,
+      syncStatus: 'Synced',
+      recordsCount: 0
+    });
+    db.fileRegistry.push({
+      id: `file-volt-${newLoc.id}`,
+      divisionId: newLoc.divisionId,
+      subdivisionId: newLoc.subdivisionId,
+      locationId: newLoc.id,
+      locationName: newLoc.name,
+      fileType: 'volt_amp_reading',
+      fileName: `${cleanFolder}_Volt_Amp_Readings.xlsx`,
+      lastSyncedAt: newLoc.createdAt,
+      syncStatus: 'Synced',
+      recordsCount: 0
+    });
+
+    DatabaseStore.saveToDisk();
+    DatabaseStore.logAudit(req.body.user || 'Admin', 'CREATE_LOCATION', 'Location', newLoc.id, null, newLoc);
+    broadcastSync(newLoc, 'LOCATION_CREATED');
+
+    return res.status(201).json({ success: true, location: newLoc });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// 5. Transformers Master
+app.get('/api/transformers', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, transformers: db.transformers });
+});
+
+app.post('/api/transformers', (req: Request, res: Response) => {
+  try {
+    const { locationId, serialNumber, make, capacity, status } = req.body;
+    if (!locationId || !serialNumber || !capacity) {
+      return res.status(400).json({ success: false, error: 'locationId, serialNumber and capacity are required.' });
+    }
+
+    const db = DatabaseStore.get();
+    const newTC: Transformer = {
+      id: `tc-${Date.now()}`,
+      locationId,
+      serialNumber: String(serialNumber).trim(),
+      make: String(make || 'Standard').trim(),
+      capacity: String(capacity).trim(),
+      status: status === 'inactive' ? 'inactive' : 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.transformers.push(newTC);
+    DatabaseStore.saveToDisk();
+    DatabaseStore.logAudit(req.body.user || 'Admin', 'CREATE_TRANSFORMER', 'Transformer', newTC.id, null, newTC);
+    broadcastSync(newTC, 'TRANSFORMER_CREATED');
+
+    return res.status(201).json({ success: true, transformer: newTC });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// 6. Materials Master & Variants
+app.get('/api/materials', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, materials: db.materials });
+});
+
+app.post('/api/materials', (req: Request, res: Response) => {
+  try {
+    const { name, category, unit, variants, openingStock } = req.body;
+    if (!name || !unit) {
+      return res.status(400).json({ success: false, error: 'Material name and unit are required.' });
+    }
+
+    const db = DatabaseStore.get();
+    const matId = `mat-${Date.now()}`;
+    const initialStock = Number(openingStock) || 0;
+
+    const variantList = Array.isArray(variants) ? variants.map((v: any, i: number) => ({
+      id: v.id || `var-${matId}-${i}`,
+      materialId: matId,
+      variantName: String(typeof v === 'string' ? v : v.variantName).trim(),
+      unit: v.unit || unit,
+      status: 'active' as const
+    })) : [];
+
+    const newMaterial: Material = {
+      id: matId,
+      name: String(name).trim(),
+      category: String(category || 'General').trim(),
+      unit: String(unit).trim(),
+      status: 'active',
+      variants: variantList,
+      openingStock: initialStock,
+      currentStock: initialStock,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.materials.push(newMaterial);
+    DatabaseStore.saveToDisk();
+    DatabaseStore.logAudit(req.body.user || 'Admin', 'CREATE_MATERIAL', 'Material', newMaterial.id, null, newMaterial);
+    broadcastSync(newMaterial, 'MATERIAL_CREATED');
+
+    return res.status(201).json({ success: true, material: newMaterial });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// 7. Daily Work Entries (The Main Feature - Atomic & Transactional)
+app.get('/api/entries', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, count: db.dailyEntries.length, entries: db.dailyEntries });
+});
+
+app.post('/api/entries', async (req: Request, res: Response) => {
+  try {
+    const { 
+      divisionId, 
+      subdivisionId, 
+      locationId, 
+      transformerId, 
+      entryDate, 
+      enteredBy, 
+      locationType, 
+      remarks, 
+      items 
+    } = req.body;
+
+    if (!locationId || !entryDate || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'locationId, entryDate, and at least one item in items array are required.'
+      });
+    }
+
+    const db = DatabaseStore.get();
+    let targetLoc = db.locations.find(l => l.id === locationId || l.name.toLowerCase() === String(locationId).toLowerCase());
+    
+    // Auto-create location if field user entered a new site location
+    if (!targetLoc) {
+      const cleanName = String(locationId).trim().toUpperCase();
+      const firstSub = db.subdivisions[0];
+      targetLoc = {
+        id: `loc-${Date.now()}`,
+        divisionId: firstSub ? firstSub.divisionId : 'div-vyara',
+        subdivisionId: firstSub ? firstSub.id : 'sub-dolvan',
+        name: cleanName,
+        code: `LOC-${Math.floor(100 + Math.random() * 900)}`,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      db.locations.push(targetLoc);
+    }
+
+    const finalDivId = divisionId || targetLoc.divisionId;
+    const finalSubId = subdivisionId || targetLoc.subdivisionId;
+    const newEntryId = `ENTRY-${entryDate.replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
+
+    // Build Entry Items and validate quantities
+    const entryItems: DailyEntryItem[] = [];
+    const stockOutTransactions: StockTransaction[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const qty = Number(it.quantity !== undefined ? it.quantity : it.value) || 0;
+      if (qty <= 0 && (!it.value || it.value === '')) continue; // Skip blank zero rows
+
+      const mat = db.materials.find(m => m.id === it.materialId || m.name.toLowerCase() === String(it.materialName || it.itemName).toLowerCase());
+      const matName = mat ? mat.name : (it.materialName || it.itemName || 'Custom Item');
+      const matId = mat ? mat.id : (it.materialId || `mat-${i}`);
+      const unit = it.unit || mat?.unit || 'Nos.';
+      const variantName = it.variantName || it.selectedType || undefined;
+
+      const entryItem: DailyEntryItem = {
+        id: `item-${newEntryId}-${i + 1}`,
+        entryId: newEntryId,
+        materialId: matId,
+        materialName: matName,
+        variantName,
+        quantity: qty,
+        unit,
+        remark: it.remark
+      };
+      entryItems.push(entryItem);
+
+      // Create Stock OUT transaction
+      stockOutTransactions.push({
+        id: `TX-OUT-${newEntryId}-${i + 1}`,
+        materialId: matId,
+        materialName: matName,
+        variantName,
+        type: 'OUT',
+        quantity: qty,
+        unit,
+        referenceType: 'daily_entry',
+        referenceId: newEntryId,
+        divisionId: finalDivId,
+        subdivisionId: finalSubId,
+        locationId: targetLoc.id,
+        date: entryDate,
+        enteredBy: enteredBy || 'Site Personnel',
+        notes: `Used for daily work at ${targetLoc.name}`,
+        createdAt: new Date().toISOString()
+      });
+
+      // Deduct stock if tracked material
+      if (mat) {
+        mat.currentStock = Math.max(0, mat.currentStock - qty);
+        mat.updatedAt = new Date().toISOString();
+      }
+    }
+
+    const newDailyEntry: DailyEntry = {
+      id: newEntryId,
+      divisionId: finalDivId,
+      subdivisionId: finalSubId,
+      locationId: targetLoc.id,
+      transformerId,
+      entryDate,
+      enteredBy: String(enteredBy || 'Field Engineer').trim(),
+      locationType: locationType === 'Maintenance' ? 'Maintenance' : 'In house',
+      remarks: remarks ? String(remarks).trim() : undefined,
+      version: 1,
+      syncStatus: 'Synced',
+      items: entryItems,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.dailyEntries.unshift(newDailyEntry);
+    db.stockTransactions.push(...stockOutTransactions);
+
+    // Update File Registry count
+    const fileReg = db.fileRegistry.find(f => f.locationId === targetLoc!.id && f.fileType === 'inventory_usage');
+    if (fileReg) {
+      fileReg.recordsCount += 1;
+      fileReg.lastSyncedAt = newDailyEntry.createdAt;
+    }
+
+    // Persist to disk atomically
+    DatabaseStore.saveToDisk();
+
+    // Log Audit
+    DatabaseStore.logAudit(
+      newDailyEntry.enteredBy,
+      'CREATE_DAILY_ENTRY',
+      'DailyEntry',
+      newDailyEntry.id,
+      null,
+      { location: targetLoc.name, itemsCount: entryItems.length }
+    );
+
+    // Real-Time SSE broadcast
+    broadcastSync(newDailyEntry, 'ENTRY_CREATED');
+    broadcastSync({ action: 'stock_deducted', transactions: stockOutTransactions }, 'STOCK_UPDATED');
+
+    // Cloud background sync
+    GoogleCloudIntegration.syncDailyEntry(newDailyEntry).catch(() => {});
+
+    return res.status(201).json({
+      success: true,
+      message: `Daily entry saved and stock updated at ${targetLoc.name}.`,
+      entry: newDailyEntry
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// Update an existing Daily Entry with Version Conflict Protection
+app.put('/api/entries/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = DatabaseStore.get();
+  const entry = db.dailyEntries.find(e => e.id === id);
+
+  if (!entry) {
+    return res.status(404).json({ success: false, error: 'Daily Entry not found' });
+  }
+
+  // Conflict Protection Check (Phase 26)
+  if (req.body.version !== undefined && Number(req.body.version) !== entry.version) {
+    return res.status(409).json({
+      success: false,
+      conflict: true,
+      error: 'This record was modified by another user. Please refresh before saving.'
+    });
+  }
+
+  const oldEntry = JSON.parse(JSON.stringify(entry));
+
+  if (req.body.remarks !== undefined) entry.remarks = req.body.remarks;
+  if (req.body.locationType !== undefined) entry.locationType = req.body.locationType;
+  if (req.body.enteredBy !== undefined) entry.enteredBy = req.body.enteredBy;
+  if (req.body.entryDate !== undefined) entry.entryDate = req.body.entryDate;
+  if (req.body.items && Array.isArray(req.body.items)) {
+    entry.items = req.body.items;
+  }
+
+  entry.version += 1;
+  entry.updatedAt = new Date().toISOString();
+
+  DatabaseStore.saveToDisk();
+  DatabaseStore.logAudit(entry.enteredBy, 'UPDATE_DAILY_ENTRY', 'DailyEntry', entry.id, oldEntry, entry);
+  broadcastSync(entry, 'ENTRY_UPDATED');
+
+  return res.json({ success: true, entry });
+});
+
+// Delete a Daily Entry (Soft Delete / Historical audit protection)
+app.delete('/api/entries/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = DatabaseStore.get();
+  const index = db.dailyEntries.findIndex(e => e.id === id);
+
+  if (index === -1) {
+    return res.status(404).json({ success: false, error: 'Entry not found' });
+  }
+
+  const deleted = db.dailyEntries.splice(index, 1)[0];
+  DatabaseStore.saveToDisk();
+  DatabaseStore.logAudit(req.body.user || 'Admin', 'DELETE_DAILY_ENTRY', 'DailyEntry', id, deleted, null);
+  broadcastSync({ id }, 'ENTRY_DELETED');
+
+  return res.json({ success: true, message: 'Daily Entry removed.', deleted });
+});
+
+// 8. Transformer Volt-Amp Readings (Dedicated Workflow per Phase 4)
+app.get('/api/readings', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, count: db.transformerReadings.length, readings: db.transformerReadings });
+});
+
+app.post('/api/readings', (req: Request, res: Response) => {
+  try {
+    const {
+      locationId,
+      transformerId,
+      readingDate,
+      readingTime,
+      voltageRN,
+      voltageYN,
+      voltageBN,
+      ampereR,
+      ampereY,
+      ampereB,
+      ampereN,
+      enteredBy,
+      remarks
+    } = req.body;
+
+    if (!locationId || !readingDate || voltageRN === undefined || ampereR === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'locationId, readingDate, Voltage RN and Ampere R readings are required.'
+      });
+    }
+
+    const db = DatabaseStore.get();
+    const loc = db.locations.find(l => l.id === locationId || l.name.toLowerCase() === String(locationId).toLowerCase());
+    const tc = transformerId ? db.transformers.find(t => t.id === transformerId) : undefined;
+    const locName = loc ? loc.name : String(locationId);
+
+    const newReading: TransformerReading = {
+      id: `READ-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      srNo: db.transformerReadings.length + 1,
+      divisionId: loc ? loc.divisionId : 'div-vyara',
+      subdivisionId: loc ? loc.subdivisionId : 'sub-dolvan',
+      locationId: loc ? loc.id : locationId,
+      locationName: locName,
+      transformerId: tc ? tc.id : 'tc-general',
+      transformerSerial: tc ? tc.serialNumber : (req.body.transformerSerial || 'General'),
+      transformerMake: tc ? tc.make : (req.body.transformerMake || 'Standard'),
+      transformerCapacity: tc ? tc.capacity : (req.body.transformerCapacity || '100 KVA'),
+      readingDate,
+      readingTime: readingTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      voltageRN: Number(voltageRN) || 0,
+      voltageYN: Number(voltageYN) || 0,
+      voltageBN: Number(voltageBN) || 0,
+      ampereR: Number(ampereR) || 0,
+      ampereY: Number(ampereY) || 0,
+      ampereB: Number(ampereB) || 0,
+      ampereN: Number(ampereN) || 0,
+      enteredBy: String(enteredBy || 'Technician').trim(),
+      remarks: remarks ? String(remarks).trim() : undefined,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.transformerReadings.unshift(newReading);
+
+    // Update File Registry count
+    const fileReg = db.fileRegistry.find(f => f.locationId === loc?.id && f.fileType === 'volt_amp_reading');
+    if (fileReg) {
+      fileReg.recordsCount += 1;
+      fileReg.lastSyncedAt = newReading.createdAt;
+    }
+
+    DatabaseStore.saveToDisk();
+    DatabaseStore.logAudit(newReading.enteredBy, 'CREATE_READING', 'TransformerReading', newReading.id, null, newReading);
+    broadcastSync(newReading, 'READING_CREATED');
+
+    GoogleCloudIntegration.syncReading(newReading).catch(() => {});
+
+    return res.status(201).json({ success: true, message: 'Volt-Amp Reading recorded.', reading: newReading });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// 9. Stock Inventory Status & Transactions
+app.get('/api/stock', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
   res.json({
     success: true,
-    count: inventorySubmissions.length,
-    submissions: inventorySubmissions
+    materials: db.materials.map(m => ({
+      id: m.id,
+      name: m.name,
+      category: m.category,
+      unit: m.unit,
+      openingStock: m.openingStock,
+      currentStock: m.currentStock,
+      variants: m.variants
+    })),
+    recentTransactions: db.stockTransactions.slice(-20)
   });
 });
 
-// GET Location folders tree with the 2 files per location
-app.get('/api/inventory/locations-tree', (_req: Request, res: Response) => {
-  const locationMap = new Map<string, { inHouseCount: number; inHouseItems: number; maintenanceCount: number; maintenanceItems: number; lastUpdated: string }>();
+app.post('/api/stock/transaction', (req: Request, res: Response) => {
+  try {
+    const { materialId, type, quantity, notes, enteredBy, variantName } = req.body;
+    if (!materialId || !type || !quantity) {
+      return res.status(400).json({ success: false, error: 'materialId, type (IN, OUT, ADJUSTMENT, RETURN) and quantity required.' });
+    }
 
-  // Extract all distinct locations
-  for (const sub of inventorySubmissions) {
-    if (!locationMap.has(sub.location)) {
-      locationMap.set(sub.location, { inHouseCount: 0, inHouseItems: 0, maintenanceCount: 0, maintenanceItems: 0, lastUpdated: sub.timestamp });
+    const db = DatabaseStore.get();
+    const mat = db.materials.find(m => m.id === materialId);
+    if (!mat) return res.status(404).json({ success: false, error: 'Material not found.' });
+
+    const qty = Number(quantity);
+    if (type === 'IN' || type === 'RETURN') {
+      mat.currentStock += qty;
+    } else if (type === 'OUT') {
+      mat.currentStock = Math.max(0, mat.currentStock - qty);
+    } else if (type === 'ADJUSTMENT') {
+      mat.currentStock = qty; // direct stock count adjustment
     }
-    const current = locationMap.get(sub.location)!;
-    if (new Date(sub.timestamp) > new Date(current.lastUpdated)) {
-      current.lastUpdated = sub.timestamp;
-    }
-    if (sub.locationType === 'In house') {
-      current.inHouseCount += 1;
-      current.inHouseItems += sub.items.length;
-    } else {
-      current.maintenanceCount += 1;
-      current.maintenanceItems += sub.items.length;
-    }
+
+    const tx: StockTransaction = {
+      id: `STK-TX-${Date.now()}`,
+      materialId: mat.id,
+      materialName: mat.name,
+      variantName,
+      type,
+      quantity: qty,
+      unit: mat.unit,
+      referenceType: 'manual_adjustment',
+      date: new Date().toISOString().slice(0, 10),
+      enteredBy: enteredBy || 'Inventory Controller',
+      notes,
+      createdAt: new Date().toISOString()
+    };
+
+    db.stockTransactions.push(tx);
+    DatabaseStore.saveToDisk();
+    DatabaseStore.logAudit(enteredBy || 'Admin', 'STOCK_ADJUSTMENT', 'Material', mat.id, null, { type, quantity: qty, balance: mat.currentStock });
+    broadcastSync(tx, 'STOCK_UPDATED');
+
+    return res.status(201).json({ success: true, material: mat, transaction: tx });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
   }
+});
 
-  const folders = Array.from(locationMap.entries()).map(([loc, data]) => {
-    const cleanName = sanitizeFolderName(loc);
+// 10. File Registry & Google Drive Sync Status
+app.get('/api/file-registry', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, files: db.fileRegistry });
+});
+
+app.get('/api/cloud/status', (_req: Request, res: Response) => {
+  res.json({ success: true, status: GoogleCloudIntegration.getStatus() });
+});
+
+app.post('/api/cloud/sync-hierarchy', async (_req: Request, res: Response) => {
+  const result = await GoogleCloudIntegration.syncHierarchyFolders();
+  res.json(result);
+});
+
+// 11. Bill Reference Module (BILL FORM AND GST DOLVAN.xls)
+app.get('/api/bills', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, bills: db.bills });
+});
+
+app.post('/api/bills', (req: Request, res: Response) => {
+  try {
+    const { billNumber, date, contractorName, contractorGstin, items, cgstRate = 9, sgstRate = 9, remarks } = req.body;
+    if (!billNumber || !contractorName || !items || !Array.isArray(items)) {
+      return res.status(400).json({ success: false, error: 'billNumber, contractorName, and items are required.' });
+    }
+
+    const subtotal = items.reduce((sum: number, it: any) => sum + (Number(it.quantity) * Number(it.unitRate)), 0);
+    const cgstAmount = Math.round((subtotal * (Number(cgstRate) / 100)) * 100) / 100;
+    const sgstAmount = Math.round((subtotal * (Number(sgstRate) / 100)) * 100) / 100;
+    const totalGst = cgstAmount + sgstAmount;
+    const netAmount = Math.round(subtotal + totalGst);
+
+    const newBill: BillRecord = {
+      id: `BILL-${Date.now()}`,
+      billNumber: String(billNumber).trim(),
+      date: date || new Date().toISOString().slice(0, 10),
+      divisionId: 'div-vyara',
+      subdivisionId: 'sub-dolvan',
+      contractorName: String(contractorName).trim(),
+      contractorGstin: String(contractorGstin || '').trim(),
+      items: items.map((it: any, i: number) => ({
+        id: `bi-${i + 1}`,
+        description: it.description,
+        quantity: Number(it.quantity),
+        unit: it.unit || 'Nos.',
+        unitRate: Number(it.unitRate),
+        amount: Number(it.quantity) * Number(it.unitRate)
+      })),
+      subtotal,
+      cgstRate: Number(cgstRate),
+      cgstAmount,
+      sgstRate: Number(sgstRate),
+      sgstAmount,
+      totalGst,
+      roundOff: netAmount - (subtotal + totalGst),
+      netAmount,
+      remarks,
+      status: 'Approved',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const db = DatabaseStore.get();
+    db.bills.unshift(newBill);
+    DatabaseStore.saveToDisk();
+
+    return res.status(201).json({ success: true, bill: newBill });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// 12. Audit Logs
+app.get('/api/audit-logs', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, count: db.auditLogs.length, logs: db.auditLogs });
+});
+
+// -------------------------------------------------------------
+// UI Compatibility Endpoints (/api/inventory/*)
+// -------------------------------------------------------------
+
+// GET all inventory entries formatted for UI
+app.get('/api/inventory/entries', (_req: Request, res: Response) => {
+  const submissions = DatabaseStore.getSubmissionsFormatted();
+  res.json({ success: true, count: submissions.length, submissions });
+});
+
+// POST new submission from UI Quick Entry
+app.post('/api/inventory/entries', async (req: Request, res: Response) => {
+  try {
+    const { location, locationType, submittedBy, notes, items, id } = req.body;
+    if (!location || !items || !Array.isArray(items)) {
+      return res.status(400).json({ success: false, error: 'location and items are required.' });
+    }
+
+    const db = DatabaseStore.get();
+    let targetLoc = db.locations.find(l => l.name.toLowerCase() === String(location).trim().toLowerCase() || l.id === location);
+    if (!targetLoc) {
+      targetLoc = {
+        id: `loc-${Date.now()}`,
+        divisionId: db.divisions[0]?.id || 'div-vyara',
+        subdivisionId: db.subdivisions[0]?.id || 'sub-dolvan',
+        name: String(location).trim().toUpperCase(),
+        code: `LOC-${Math.floor(100 + Math.random() * 900)}`,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      db.locations.push(targetLoc);
+    }
+
+    const cleanType: 'In house' | 'Maintenance' = locationType === 'Maintenance' ? 'Maintenance' : 'In house';
+    const entryDate = new Date().toISOString().slice(0, 10);
+    const newEntryId = id || `INV-${entryDate.replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const entryItems: DailyEntryItem[] = [];
+    const stockTransactions: StockTransaction[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const qty = Number(it.value !== undefined ? it.value : it.quantity) || 0;
+      if (qty <= 0 && (!it.value || it.value === '')) continue;
+
+      const mat = db.materials.find(m => m.id === it.itemId || m.name.toLowerCase() === String(it.itemName).toLowerCase());
+      const matName = mat ? mat.name : it.itemName;
+      const matId = mat ? mat.id : (it.itemId || `mat-${i}`);
+
+      entryItems.push({
+        id: `item-${newEntryId}-${i + 1}`,
+        entryId: newEntryId,
+        materialId: matId,
+        materialName: matName,
+        variantName: it.selectedType || undefined,
+        quantity: qty,
+        unit: it.unit || mat?.unit || 'Nos.',
+        remark: it.remark
+      });
+
+      stockTransactions.push({
+        id: `TX-OUT-${newEntryId}-${i + 1}`,
+        materialId: matId,
+        materialName: matName,
+        variantName: it.selectedType || undefined,
+        type: 'OUT',
+        quantity: qty,
+        unit: it.unit || mat?.unit || 'Nos.',
+        referenceType: 'daily_entry',
+        referenceId: newEntryId,
+        divisionId: targetLoc.divisionId,
+        subdivisionId: targetLoc.subdivisionId,
+        locationId: targetLoc.id,
+        date: entryDate,
+        enteredBy: submittedBy || 'Site Personnel',
+        createdAt: new Date().toISOString()
+      });
+
+      if (mat) {
+        mat.currentStock = Math.max(0, mat.currentStock - qty);
+      }
+    }
+
+    const dailyEntry: DailyEntry = {
+      id: newEntryId,
+      divisionId: targetLoc.divisionId,
+      subdivisionId: targetLoc.subdivisionId,
+      locationId: targetLoc.id,
+      entryDate,
+      enteredBy: String(submittedBy || 'Site Engineer').trim(),
+      locationType: cleanType,
+      remarks: notes ? String(notes).trim() : undefined,
+      version: 1,
+      syncStatus: 'Synced',
+      items: entryItems,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    db.dailyEntries.unshift(dailyEntry);
+    db.stockTransactions.push(...stockTransactions);
+    DatabaseStore.saveToDisk();
+
+    const formattedSubmission: InventorySubmission = {
+      id: dailyEntry.id,
+      timestamp: dailyEntry.createdAt,
+      divisionId: targetLoc.divisionId,
+      subdivisionId: targetLoc.subdivisionId,
+      locationId: targetLoc.id,
+      location: targetLoc.name,
+      locationType: dailyEntry.locationType,
+      submittedBy: dailyEntry.enteredBy,
+      notes: dailyEntry.remarks,
+      version: 1,
+      syncStatus: 'Synced',
+      items: dailyEntry.items.map(it => ({
+        itemId: it.materialId,
+        itemName: it.materialName,
+        fieldType: 'dual',
+        value: it.quantity,
+        selectedType: it.variantName || null,
+        unit: it.unit
+      }))
+    };
+
+    broadcastSync({ action: 'created', submission: formattedSubmission }, 'submission_created');
+    broadcastSync(dailyEntry, 'ENTRY_CREATED');
+
+    const cleanFolder = sanitizeFolderName(targetLoc.name);
+    const targetFile = cleanType === 'In house' ? `${cleanFolder}_In_House.xlsx` : `${cleanFolder}_Maintenance.xlsx`;
+
+    return res.status(201).json({
+      success: true,
+      message: `Inventory submission saved. Synced into folder "${cleanFolder}/" in file "${targetFile}".`,
+      submission: formattedSubmission,
+      targetFolder: cleanFolder,
+      targetFile
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// GET Location Explorer tree with the 2 persistent files
+app.get('/api/inventory/locations-tree', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  const divMap = new Map(db.divisions.map(d => [d.id, d]));
+  const subMap = new Map(db.subdivisions.map(s => [s.id, s]));
+
+  const folders = db.locations.map(loc => {
+    const cleanFolder = sanitizeFolderName(loc.name);
+    const div = divMap.get(loc.divisionId);
+    const sub = subMap.get(loc.subdivisionId);
+
+    const locEntries = db.dailyEntries.filter(e => e.locationId === loc.id);
+    const inHouseEntries = locEntries.filter(e => e.locationType === 'In house');
+    const maintEntries = locEntries.filter(e => e.locationType === 'Maintenance');
+    const readings = db.transformerReadings.filter(r => r.locationId === loc.id);
+
     return {
-      locationName: loc,
-      folderName: cleanName,
-      lastUpdated: data.lastUpdated,
+      locationId: loc.id,
+      locationName: loc.name,
+      folderName: cleanFolder,
+      divisionName: div ? div.name : 'VYARA',
+      subdivisionName: sub ? sub.name : 'DOLVAN',
+      lastUpdated: locEntries[0]?.createdAt || loc.updatedAt,
       files: [
         {
-          fileName: `${cleanName}_In_House.xlsx`,
+          fileName: `${cleanFolder}_Inventory_Usage.xlsx`,
           type: 'In house' as const,
-          submissionsCount: data.inHouseCount,
-          itemsCount: data.inHouseItems
+          submissionsCount: inHouseEntries.length,
+          itemsCount: inHouseEntries.reduce((sum, e) => sum + e.items.length, 0),
+          lastUpdated: inHouseEntries[0]?.createdAt || loc.updatedAt
         },
         {
-          fileName: `${cleanName}_Maintenance.xlsx`,
+          fileName: `${cleanFolder}_Maintenance_Log.xlsx`,
           type: 'Maintenance' as const,
-          submissionsCount: data.maintenanceCount,
-          itemsCount: data.maintenanceItems
+          submissionsCount: maintEntries.length,
+          itemsCount: maintEntries.reduce((sum, e) => sum + e.items.length, 0),
+          lastUpdated: maintEntries[0]?.createdAt || loc.updatedAt
+        },
+        {
+          fileName: `${cleanFolder}_Volt_Amp_Readings.xlsx`,
+          type: 'volt_amp_reading' as const,
+          submissionsCount: readings.length,
+          itemsCount: readings.length,
+          lastUpdated: readings[0]?.createdAt || loc.updatedAt
         }
       ]
     };
@@ -388,187 +1166,97 @@ app.get('/api/inventory/locations-tree', (_req: Request, res: Response) => {
   res.json({ success: true, folders });
 });
 
-// POST new submission (appends into the respective Location folder & File)
-app.post('/api/inventory/entries', (req: Request, res: Response) => {
-  try {
-    const { location, locationType, submittedBy, notes, items, id } = req.body;
-
-    if (!location || !locationType || !items || !Array.isArray(items)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields: location, locationType, and items array are required.'
-      });
-    }
-
-    const cleanLoc = String(location).trim();
-    const cleanType: 'In house' | 'Maintenance' = locationType === 'Maintenance' ? 'Maintenance' : 'In house';
-    const cleanFolder = sanitizeFolderName(cleanLoc);
-    const targetFile = cleanType === 'In house' ? `${cleanFolder}_In_House.xlsx` : `${cleanFolder}_Maintenance.xlsx`;
-
-    const newId = id || `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
-
-    const newSubmission: InventorySubmission = {
-      id: newId,
-      timestamp: new Date().toISOString(),
-      location: cleanLoc,
-      locationType: cleanType,
-      submittedBy: String(submittedBy || 'Site Engineer').trim(),
-      notes: notes ? String(notes).trim() : undefined,
-      syncStatus: 'Synced',
-      items: items.map((it: InventoryItemValue) => ({
-        itemId: it.itemId || it.itemName.toLowerCase().replace(/\s+/g, '_'),
-        itemName: it.itemName,
-        fieldType: it.fieldType || 'input_only',
-        value: it.value !== undefined ? it.value : '',
-        selectedType: it.selectedType || null,
-        unit: it.unit,
-        optionValues: it.optionValues
-      }))
-    };
-
-    inventorySubmissions.unshift(newSubmission);
-
-    // Broadcast in real-time
-    broadcastSync({
-      action: 'created',
-      submission: newSubmission,
-      targetFolder: cleanFolder,
-      targetFile,
-      totalCount: inventorySubmissions.length
-    }, 'submission_created');
-
-    return res.status(201).json({
-      success: true,
-      message: `Inventory submission saved. Synced into folder "${cleanFolder}/" in file "${targetFile}".`,
-      submission: newSubmission,
-      targetFolder: cleanFolder,
-      targetFile,
-      rowsAppended: newSubmission.items.length
-    });
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ success: false, error: errorMsg });
-  }
-});
-
-// PUT update an existing submission
-app.put('/api/inventory/entries/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const index = inventorySubmissions.findIndex(s => s.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({ success: false, error: 'Submission not found' });
-  }
-
-  const { location, locationType, submittedBy, notes, items } = req.body;
-
-  inventorySubmissions[index] = {
-    ...inventorySubmissions[index],
-    location: location !== undefined ? location : inventorySubmissions[index].location,
-    locationType: locationType !== undefined ? locationType : inventorySubmissions[index].locationType,
-    submittedBy: submittedBy !== undefined ? submittedBy : inventorySubmissions[index].submittedBy,
-    notes: notes !== undefined ? notes : inventorySubmissions[index].notes,
-    items: items !== undefined ? items : inventorySubmissions[index].items,
-    syncStatus: 'Synced'
-  };
-
-  broadcastSync({
-    action: 'updated',
-    submission: inventorySubmissions[index]
-  }, 'submission_updated');
-
-  return res.json({
-    success: true,
-    message: 'Submission updated successfully',
-    submission: inventorySubmissions[index]
-  });
-});
-
-// DELETE a submission
-app.delete('/api/inventory/entries/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const index = inventorySubmissions.findIndex(s => s.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({ success: false, error: 'Submission not found' });
-  }
-
-  const deleted = inventorySubmissions.splice(index, 1)[0];
-
-  broadcastSync({
-    action: 'deleted',
-    id: id
-  }, 'submission_deleted');
-
-  return res.json({
-    success: true,
-    message: 'Submission deleted successfully',
-    deleted
-  });
-});
-
-// POST batch sync for offline queue
+// Batch sync for offline queue (Phase 29)
 app.post('/api/inventory/batch-sync', (req: Request, res: Response) => {
   const { submissions } = req.body;
-
   if (!submissions || !Array.isArray(submissions)) {
     return res.status(400).json({ success: false, error: 'Submissions array is required' });
   }
 
+  const db = DatabaseStore.get();
   let addedCount = 0;
+
   for (const sub of submissions) {
-    const existing = inventorySubmissions.find(s => s.id === sub.id);
-    if (!existing) {
-      inventorySubmissions.unshift({
-        ...sub,
-        syncStatus: 'Synced'
-      });
+    const exists = db.dailyEntries.find(e => e.id === sub.id);
+    if (!exists) {
+      const loc = db.locations.find(l => l.name.toLowerCase() === String(sub.location).toLowerCase()) || db.locations[0];
+      const newEntry: DailyEntry = {
+        id: sub.id,
+        divisionId: loc.divisionId,
+        subdivisionId: loc.subdivisionId,
+        locationId: loc.id,
+        entryDate: sub.timestamp ? sub.timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        enteredBy: sub.submittedBy || 'Field Personnel',
+        locationType: sub.locationType === 'Maintenance' ? 'Maintenance' : 'In house',
+        remarks: sub.notes,
+        version: 1,
+        syncStatus: 'Synced',
+        items: (sub.items || []).map((it: any, i: number) => ({
+          id: `item-${sub.id}-${i + 1}`,
+          entryId: sub.id,
+          materialId: it.itemId || `mat-${i}`,
+          materialName: it.itemName || 'Material',
+          variantName: it.selectedType,
+          quantity: Number(it.value) || 0,
+          unit: it.unit || 'Nos.'
+        })),
+        createdAt: sub.timestamp || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      db.dailyEntries.unshift(newEntry);
       addedCount++;
     }
   }
 
-  broadcastSync({
-    action: 'batch_synced',
-    addedCount
-  }, 'batch_synced');
+  DatabaseStore.saveToDisk();
+  broadcastSync({ addedCount }, 'batch_synced');
 
-  return res.json({
+  res.json({
     success: true,
-    message: `Batch sync completed: ${addedCount} offline entries synchronized into respective Location Excel files.`,
-    totalRecords: inventorySubmissions.length
+    message: `Synchronized ${addedCount} offline entries into persistent central storage.`,
+    totalRecords: db.dailyEntries.length
   });
 });
 
-// Download a specific Location Excel File ([Location]_In_House.xlsx or [Location]_Maintenance.xlsx)
+// Download a specific Location Excel File (.xlsx with hierarchical merged headers)
 app.get('/api/inventory/export/location-file', (req: Request, res: Response) => {
   try {
     const location = String(req.query.location || '').trim();
-    const type = req.query.type === 'Maintenance' ? 'Maintenance' : 'In house';
+    const fileType = String(req.query.fileType || req.query.type || 'usage');
 
     if (!location) {
       return res.status(400).json({ success: false, error: 'Location query parameter required' });
     }
 
-    const { headerRow1, headerRow2, dataRows, merges } = generateHierarchicalExcelData(location, type);
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([headerRow1, headerRow2, ...dataRows]);
-    ws['!merges'] = merges;
-    ws['!cols'] = headerRow1.map((_, i) => ({ wch: Math.max(12, String(headerRow2[i] || '').length + 4) }));
-
-    const sheetTitle = type === 'In house' ? 'In_House_Log' : 'Maintenance_Log';
-    XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
-
     const cleanFolder = sanitizeFolderName(location);
-    const fileName = type === 'In house' ? `${cleanFolder}_In_House.xlsx` : `${cleanFolder}_Maintenance.xlsx`;
+    const wb = XLSX.utils.book_new();
 
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    return res.send(buffer);
+    if (fileType === 'volt_amp' || fileType === 'readings') {
+      const data = generateLocationReadingsExcel(location);
+      const ws = XLSX.utils.aoa_to_sheet([data.headersRow1, data.headersRow2, ...data.dataRows]);
+      ws['!merges'] = data.merges;
+      ws['!cols'] = data.headersRow1.map((_, i) => ({ wch: Math.max(12, String(data.headersRow2[i] || '').length + 4) }));
+      XLSX.utils.book_append_sheet(wb, ws, 'Volt_Amp_Readings');
+      const fileName = `${cleanFolder}_Volt_Amp_Readings.xlsx`;
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    } else {
+      const data = generateLocationUsageExcel(location);
+      const ws = XLSX.utils.aoa_to_sheet([data.headersRow1, data.headersRow2, ...data.dataRows]);
+      ws['!merges'] = data.merges;
+      ws['!cols'] = data.headersRow1.map((_, i) => ({ wch: Math.max(14, String(data.headersRow2[i] || '').length + 4) }));
+      XLSX.utils.book_append_sheet(wb, ws, 'Inventory_Usage');
+      const fileName = `${cleanFolder}_Inventory_Usage.xlsx`;
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      return res.send(buffer);
+    }
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Export failed';
-    return res.status(500).json({ success: false, error: errorMsg });
+    const msg = err instanceof Error ? err.message : 'Export failed';
+    return res.status(500).json({ success: false, error: msg });
   }
 });
 
@@ -576,54 +1264,54 @@ app.get('/api/inventory/export/location-file', (req: Request, res: Response) => 
 app.get('/api/inventory/export/all-folders-zip', async (_req: Request, res: Response) => {
   try {
     const zip = new JSZip();
-    const uniqueLocations = Array.from(new Set(inventorySubmissions.map(s => s.location)));
+    const db = DatabaseStore.get();
 
-    for (const loc of uniqueLocations) {
-      const cleanFolder = sanitizeFolderName(loc);
+    for (const loc of db.locations) {
+      const cleanFolder = sanitizeFolderName(loc.name);
       const folder = zip.folder(cleanFolder);
 
       if (folder) {
-        // 1. File 1: In House
-        const inHouseData = generateHierarchicalExcelData(loc, 'In house');
-        const wbInHouse = XLSX.utils.book_new();
-        const wsInHouse = XLSX.utils.aoa_to_sheet([inHouseData.headerRow1, inHouseData.headerRow2, ...inHouseData.dataRows]);
-        wsInHouse['!merges'] = inHouseData.merges;
-        wsInHouse['!cols'] = inHouseData.headerRow1.map((_, i) => ({ wch: Math.max(12, String(inHouseData.headerRow2[i] || '').length + 4) }));
-        XLSX.utils.book_append_sheet(wbInHouse, wsInHouse, 'In_House_Log');
-        const bufInHouse = XLSX.write(wbInHouse, { type: 'buffer', bookType: 'xlsx' });
-        folder.file(`${cleanFolder}_In_House.xlsx`, bufInHouse);
+        // 1. File 1: Inventory Usage Log (.xlsx)
+        const usageData = generateLocationUsageExcel(loc.id);
+        const wbUsage = XLSX.utils.book_new();
+        const wsUsage = XLSX.utils.aoa_to_sheet([usageData.headersRow1, usageData.headersRow2, ...usageData.dataRows]);
+        wsUsage['!merges'] = usageData.merges;
+        wsUsage['!cols'] = usageData.headersRow1.map((_, i) => ({ wch: Math.max(14, String(usageData.headersRow2[i] || '').length + 4) }));
+        XLSX.utils.book_append_sheet(wbUsage, wsUsage, 'Inventory_Usage');
+        const bufUsage = XLSX.write(wbUsage, { type: 'buffer', bookType: 'xlsx' });
+        folder.file(`${cleanFolder}_Inventory_Usage.xlsx`, bufUsage);
 
-        // 2. File 2: Maintenance
-        const maintData = generateHierarchicalExcelData(loc, 'Maintenance');
-        const wbMaint = XLSX.utils.book_new();
-        const wsMaint = XLSX.utils.aoa_to_sheet([maintData.headerRow1, maintData.headerRow2, ...maintData.dataRows]);
-        wsMaint['!merges'] = maintData.merges;
-        wsMaint['!cols'] = maintData.headerRow1.map((_, i) => ({ wch: Math.max(12, String(maintData.headerRow2[i] || '').length + 4) }));
-        XLSX.utils.book_append_sheet(wbMaint, wsMaint, 'Maintenance_Log');
-        const bufMaint = XLSX.write(wbMaint, { type: 'buffer', bookType: 'xlsx' });
-        folder.file(`${cleanFolder}_Maintenance.xlsx`, bufMaint);
+        // 2. File 2: Volt-Amp Readings Log (.xlsx)
+        const readData = generateLocationReadingsExcel(loc.id);
+        const wbRead = XLSX.utils.book_new();
+        const wsRead = XLSX.utils.aoa_to_sheet([readData.headersRow1, readData.headersRow2, ...readData.dataRows]);
+        wsRead['!merges'] = readData.merges;
+        wsRead['!cols'] = readData.headersRow1.map((_, i) => ({ wch: Math.max(12, String(readData.headersRow2[i] || '').length + 4) }));
+        XLSX.utils.book_append_sheet(wbRead, wsRead, 'Volt_Amp_Readings');
+        const bufRead = XLSX.write(wbRead, { type: 'buffer', bookType: 'xlsx' });
+        folder.file(`${cleanFolder}_Volt_Amp_Readings.xlsx`, bufRead);
       }
     }
 
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
-
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename="Location_Excel_Folders_Package.zip"');
+    res.setHeader('Content-Disposition', 'attachment; filename="Division_Locations_Excel_Package.zip"');
     return res.send(zipBuffer);
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'ZIP generation failed';
-    return res.status(500).json({ success: false, error: errorMsg });
+    const msg = err instanceof Error ? err.message : 'ZIP generation failed';
+    return res.status(500).json({ success: false, error: msg });
   }
 });
 
-// SSE Live stream
+// SSE Live Stream for Multi-User Real-Time Sync (Phase 25)
 app.get('/api/sync/events', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  res.write(`data: ${JSON.stringify({ type: 'initial_state', data: inventorySubmissions })}\n\n`);
+  const submissions = DatabaseStore.getSubmissionsFormatted();
+  res.write(`data: ${JSON.stringify({ type: 'initial_state', data: submissions })}\n\n`);
   sseClients.add(res);
 
   const heartbeat = setInterval(() => {
@@ -658,7 +1346,7 @@ async function startServer() {
   }
 
   app.listen(PORT, () => {
-    console.log(`Location-Based Inventory System running on http://localhost:${PORT}`);
+    console.log(`[Server] Division Location Inventory System running on port ${PORT}`);
   });
 }
 

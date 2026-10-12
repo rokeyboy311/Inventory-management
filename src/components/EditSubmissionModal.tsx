@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Save, Edit3, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { InventorySubmission, InventoryItemValue } from '../types/inventory';
+import { X, Save, Edit3, Trash2, CheckCircle2, AlertCircle, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { InventorySubmission, InventoryItemValue, TransformerReportMeta } from '../types/inventory';
 
 interface EditSubmissionModalProps {
   submission: InventorySubmission | null;
@@ -19,6 +19,25 @@ export const EditSubmissionModal: React.FC<EditSubmissionModalProps> = ({
   const [locationType, setLocationType] = useState(submission.locationType);
   const [submittedBy, setSubmittedBy] = useState(submission.submittedBy);
   const [notes, setNotes] = useState(submission.notes || '');
+  const [showMetaEdit, setShowMetaEdit] = useState(Boolean(submission.reportMeta));
+  const [reportMeta, setReportMeta] = useState<TransformerReportMeta>(
+    submission.reportMeta || {
+      companyName: 'RUDRA ELECTRICAL',
+      reportTitle: 'Work Report of Transformer Maintenance Work',
+      workName: 'Transformer Maintenance & Overhauling Work',
+      division: 'O&M Division / Sub-Division',
+      workOrderNo: 'W.O./TRANS/2026/089',
+      workOrderDate: new Date().toISOString().slice(0, 10),
+      reportNo: submission.id,
+      reportDate: new Date().toISOString().slice(0, 10),
+      transformerRating: '100 KVA',
+      transformerMake: 'Voltamp Transformers',
+      transformerSerialNo: 'TR-78420-GUJ',
+      voltageRatio: '11 / 0.433 kV',
+      contractorRep: submission.submittedBy || 'Rudra Electrical',
+      discomRep: 'DISCOM / PGVCL Engineer'
+    }
+  );
   const [items, setItems] = useState<InventoryItemValue[]>(
     submission.items.map(it => ({
       ...it,
@@ -27,6 +46,10 @@ export const EditSubmissionModal: React.FC<EditSubmissionModalProps> = ({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleMetaChange = (field: keyof TransformerReportMeta, val: string) => {
+    setReportMeta(prev => ({ ...prev, [field]: val }));
+  };
 
   const handleItemValueChange = (index: number, field: 'value' | 'selectedType', val: string | number) => {
     const updated = [...items];
@@ -63,7 +86,8 @@ export const EditSubmissionModal: React.FC<EditSubmissionModalProps> = ({
         locationType,
         submittedBy: submittedBy.trim() || 'Site Supervisor',
         notes: notes.trim() || undefined,
-        items
+        items,
+        reportMeta: showMetaEdit || submission.reportMeta ? reportMeta : undefined
       });
       onClose();
     } catch (err: any) {
@@ -150,6 +174,125 @@ export const EditSubmissionModal: React.FC<EditSubmissionModalProps> = ({
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
               />
             </div>
+          </div>
+
+          {/* Transformer Work Report Details Section (Rudra Performa Meta) */}
+          <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/60">
+            <button
+              type="button"
+              onClick={() => setShowMetaEdit(!showMetaEdit)}
+              className="w-full px-4 py-2.5 bg-slate-950 flex items-center justify-between text-xs font-semibold text-amber-300 hover:bg-slate-900 transition cursor-pointer"
+            >
+              <div className="flex items-center space-x-2">
+                <FileText className="w-4 h-4 text-amber-400" />
+                <span>Transformer Work Report Details (Official Performa Meta)</span>
+              </div>
+              <div className="flex items-center space-x-1.5 text-slate-400">
+                <span className="text-[11px]">{showMetaEdit ? 'Hide Details' : 'Edit Details'}</span>
+                {showMetaEdit ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </button>
+
+            {showMetaEdit && (
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs border-t border-slate-800 bg-slate-950/40">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Company / Firm Name</label>
+                  <input
+                    type="text"
+                    value={reportMeta.companyName || ''}
+                    onChange={(e) => handleMetaChange('companyName', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                    placeholder="RUDRA ELECTRICAL"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Work Description / Name</label>
+                  <input
+                    type="text"
+                    value={reportMeta.workName || ''}
+                    onChange={(e) => handleMetaChange('workName', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                    placeholder="Transformer Maintenance Work"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Division / Sub-Division</label>
+                  <input
+                    type="text"
+                    value={reportMeta.division || ''}
+                    onChange={(e) => handleMetaChange('division', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                    placeholder="O&M Division"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">W.O. Number & Date</label>
+                  <input
+                    type="text"
+                    value={reportMeta.workOrderNo || ''}
+                    onChange={(e) => handleMetaChange('workOrderNo', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono"
+                    placeholder="W.O./TRANS/2026/089"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Transformer Capacity / Rating</label>
+                  <select
+                    value={reportMeta.transformerRating || '100 KVA'}
+                    onChange={(e) => handleMetaChange('transformerRating', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-semibold cursor-pointer"
+                  >
+                    <option value="10 KVA">10 KVA</option>
+                    <option value="16 KVA">16 KVA</option>
+                    <option value="25 KVA">25 KVA</option>
+                    <option value="63 KVA">63 KVA</option>
+                    <option value="100 KVA">100 KVA</option>
+                    <option value="160 KVA">160 KVA</option>
+                    <option value="200 KVA">200 KVA</option>
+                    <option value="250 KVA">250 KVA</option>
+                    <option value="315 KVA">315 KVA</option>
+                    <option value="500 KVA">500 KVA</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Make / Manufacturer</label>
+                  <input
+                    type="text"
+                    value={reportMeta.transformerMake || ''}
+                    onChange={(e) => handleMetaChange('transformerMake', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                    placeholder="Voltamp Transformers"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Serial Number (Sr. No.)</label>
+                  <input
+                    type="text"
+                    value={reportMeta.transformerSerialNo || ''}
+                    onChange={(e) => handleMetaChange('transformerSerialNo', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono"
+                    placeholder="TR-78420-GUJ"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Voltage Ratio</label>
+                  <input
+                    type="text"
+                    value={reportMeta.voltageRatio || '11 / 0.433 kV'}
+                    onChange={(e) => handleMetaChange('voltageRatio', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                    placeholder="11 / 0.433 kV"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Items Editing */}

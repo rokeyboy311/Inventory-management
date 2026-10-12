@@ -4,10 +4,13 @@ import {
   LayoutDashboard, 
   FolderTree, 
   Zap, 
+  Activity, 
+  Package, 
+  Receipt, 
   Wifi, 
   WifiOff, 
-  Download,
-  FileArchive,
+  FileArchive, 
+  Cloud, 
   Layers
 } from 'lucide-react';
 import { MainNavTab } from '../types/inventory';
@@ -20,6 +23,8 @@ interface MainNavigationHeaderProps {
   totalLocationsCount: number;
   onDownloadAllZip: () => void;
   onOpenSettings: () => void;
+  onOpenGoogleDriveSync: () => void;
+  isGoogleSheetsConnected?: boolean;
 }
 
 export const MainNavigationHeader: React.FC<MainNavigationHeaderProps> = ({
@@ -30,6 +35,8 @@ export const MainNavigationHeader: React.FC<MainNavigationHeaderProps> = ({
   totalLocationsCount,
   onDownloadAllZip,
   onOpenSettings,
+  onOpenGoogleDriveSync,
+  isGoogleSheetsConnected = false,
 }) => {
   return (
     <header className="bg-slate-900 border-b border-slate-800 shadow-xl sticky top-0 z-40 backdrop-blur-md bg-opacity-95">
@@ -43,92 +50,151 @@ export const MainNavigationHeader: React.FC<MainNavigationHeaderProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                  Site Inventory Manager
+                <h1 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                  Division Inventory System
                 </h1>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  Folder-Wise Excel
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-mono">
+                  VYARA ➔ DOLVAN
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 hidden md:block">
-                Location Folders • 2 Files Each (In House &amp; Maintenance) • Real-Time Sync
+              <p className="text-[11px] text-slate-400 hidden lg:block">
+                Division → Sub-Division → Location • Daily Work • Material Consumption • TC Readings
               </p>
             </div>
           </div>
 
-          {/* 3 Main Navigation Tabs (Dashboard, Location, Quick Entry) */}
-          <nav className="flex items-center space-x-1 sm:space-x-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          {/* Navigation Tabs */}
+          <nav className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
             
             {/* 1. Dashboard Tab */}
             <button
               type="button"
               onClick={() => onTabChange('dashboard')}
-              className={`flex items-center space-x-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
                 activeTab === 'dashboard'
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/40'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
-              <LayoutDashboard className="w-4 h-4" />
+              <LayoutDashboard className="w-3.5 h-3.5" />
               <span>Dashboard</span>
             </button>
 
-            {/* 2. Location (Folders & Files) Tab */}
+            {/* 2. Quick Entry Tab (The Main Feature) */}
             <button
               type="button"
-              onClick={() => onTabChange('location')}
-              className={`flex items-center space-x-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer relative ${
-                activeTab === 'location'
-                  ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md shadow-cyan-950/40'
+              onClick={() => onTabChange('quick_entry')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
+                activeTab === 'quick_entry'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
-              <FolderTree className="w-4 h-4 text-cyan-400" />
-              <span>Location</span>
-              <span className="px-1.5 py-0.2 bg-slate-900/80 rounded-full text-[10px] text-cyan-300 border border-slate-700 font-mono">
+              <Zap className="w-3.5 h-3.5 text-amber-300" />
+              <span>Quick Entry</span>
+            </button>
+
+            {/* 3. Location Folders Tab */}
+            <button
+              type="button"
+              onClick={() => onTabChange('location')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
+                activeTab === 'location'
+                  ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <FolderTree className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Locations</span>
+              <span className="px-1.5 py-0.2 bg-slate-900 rounded-full text-[10px] text-cyan-300 border border-slate-700 font-mono">
                 {totalLocationsCount}
               </span>
             </button>
 
-            {/* 3. Quick Entry Tab */}
+            {/* 4. Volt-Amp Readings Tab (Sheet 2) */}
             <button
               type="button"
-              onClick={() => onTabChange('quick_entry')}
-              className={`flex items-center space-x-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                activeTab === 'quick_entry'
-                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-blue-950/40'
+              onClick={() => onTabChange('readings')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
+                activeTab === 'readings'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
-              <Zap className="w-4 h-4 text-amber-400" />
-              <span>Quick Entry</span>
+              <Activity className="w-3.5 h-3.5 text-purple-400" />
+              <span>Volt-Amp</span>
+            </button>
+
+            {/* 5. Material Stock Register Tab */}
+            <button
+              type="button"
+              onClick={() => onTabChange('materials')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
+                activeTab === 'materials'
+                  ? 'bg-gradient-to-r from-emerald-700 to-teal-700 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Stock</span>
+            </button>
+
+            {/* 6. Bill Module Tab ("BILL FORM AND GST DOLVAN.xls") */}
+            <button
+              type="button"
+              onClick={() => onTabChange('billing')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0 ${
+                activeTab === 'billing'
+                  ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5 text-amber-300" />
+              <span className="hidden sm:inline">Billing</span>
             </button>
 
           </nav>
 
-          {/* Right Action Tools: Settings, Network Status & Download All ZIP */}
-          <div className="flex items-center space-x-2 sm:space-x-3 text-xs">
+          {/* Right Action Tools */}
+          <div className="flex items-center space-x-2 text-xs">
             
-            {/* Global Item Settings Button */}
+            {/* Google Drive & Sheets Cloud Sync */}
+            <button
+              type="button"
+              onClick={onOpenGoogleDriveSync}
+              className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border font-semibold transition cursor-pointer ${
+                isGoogleSheetsConnected 
+                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/50' 
+                  : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border-slate-700'
+              }`}
+              title="Google Drive & Central Sheets Cloud Sync"
+            >
+              <Cloud className={`w-3.5 h-3.5 ${isGoogleSheetsConnected ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span className="hidden md:inline">
+                {isGoogleSheetsConnected ? 'Drive Synced ✓' : 'Cloud Sync'}
+              </span>
+            </button>
+
+            {/* Item Settings */}
             <button
               type="button"
               onClick={onOpenSettings}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 font-semibold transition cursor-pointer"
-              title="Configure Global Items & Sub-Option Columns (e.g. Lug 100, 200, 500)"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold transition cursor-pointer"
+              title="Configure Material Masters & Form Rows"
             >
               <Layers className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Item Settings</span>
+              <span className="hidden xl:inline ml-1">Settings</span>
             </button>
 
-            {/* Download All Location Folders Package */}
+            {/* Download All ZIP */}
             <button
               type="button"
               onClick={onDownloadAllZip}
-              className="hidden lg:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold transition cursor-pointer"
-              title="Download all Location folders with their In House & Maintenance Excel files (.ZIP)"
+              className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold transition cursor-pointer"
+              title="Download all Location Excel files in ZIP package"
             >
               <FileArchive className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Download All (ZIP)</span>
+              <span>Export ZIP</span>
             </button>
 
             {/* Live Connection Status */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Building2, 
   MapPin, 
@@ -18,9 +18,12 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
-  AlertCircle
+  Calendar,
+  Activity,
+  PlusCircle,
+  Trash2
 } from 'lucide-react';
-import { InventoryItemDefinition } from '../types/inventory';
+import { InventoryItemDefinition, Division, SubDivision, Location, Transformer } from '../types/inventory';
 import { DynamicInventoryForm } from './DynamicInventoryForm';
 import { sanitizeFolderName } from '../utils/excelExporter';
 
@@ -48,6 +51,15 @@ interface QuickEntryViewProps {
   saveStatus: 'idle' | 'syncing' | 'saved' | 'error' | 'offline_queued';
   lastSavedMessage: string;
   onOpenTargetFile: (loc: string, type: 'In house' | 'Maintenance') => void;
+  // Hierarchy & Transformer props
+  divisions?: Division[];
+  subdivisions?: SubDivision[];
+  locationsList?: Location[];
+  transformers?: Transformer[];
+  selectedTransformerId?: string;
+  onTransformerChange?: (tcId: string) => void;
+  entryDate?: string;
+  onEntryDateChange?: (date: string) => void;
 }
 
 export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
@@ -74,9 +86,17 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
   saveStatus,
   lastSavedMessage,
   onOpenTargetFile,
+  divisions = [],
+  subdivisions = [],
+  locationsList = [],
+  transformers = [],
+  selectedTransformerId,
+  onTransformerChange,
+  entryDate = new Date().toISOString().slice(0, 10),
+  onEntryDateChange,
 }) => {
-  const [isAddingLocation, setIsAddingLocation] = React.useState(false);
-  const [newLocationInput, setNewLocationInput] = React.useState('');
+  const [isAddingLocation, setIsAddingLocation] = useState(false);
+  const [newLocationInput, setNewLocationInput] = useState('');
 
   const handleSaveLocation = () => {
     if (newLocationInput.trim()) {
@@ -88,7 +108,7 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
   };
 
   const cleanFolder = sanitizeFolderName(location);
-  const targetFileName = locationType === 'In house' ? `${cleanFolder}_In_House.xlsx` : `${cleanFolder}_Maintenance.xlsx`;
+  const targetFileName = locationType === 'In house' ? `${cleanFolder}_Inventory_Usage.xlsx` : `${cleanFolder}_Maintenance_Log.xlsx`;
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -100,8 +120,8 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
             <FolderTree className="w-5 h-5" />
           </div>
           <div className="truncate">
-            <span className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">
-              Target Location Folder &amp; Dedicated Excel File
+            <span className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase font-mono">
+              Central Hierarchy: VYARA ➔ DOLVAN ➔ {cleanFolder}
             </span>
             <div className="flex items-center space-x-2 mt-0.5 truncate">
               <span className="text-white font-mono text-xs sm:text-sm font-bold truncate">
@@ -126,16 +146,46 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
         </button>
       </div>
 
-      {/* 1. Header Control Section (Location, Type, Submitted By) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+      {/* 1. Header Control Section: Hierarchy, Date, Location, Type, Engineer */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        
+        {/* Row A: Division & Sub-Division Context */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800 text-xs">
+          <div className="flex items-center space-x-2">
+            <Building2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-slate-400">Division:</span>
+            <span className="font-bold text-white bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+              VYARA
+            </span>
+            <span className="text-slate-600">➔</span>
+            <span className="text-slate-400">Sub-Division:</span>
+            <span className="font-bold text-cyan-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+              DOLVAN
+            </span>
+          </div>
+
+          {/* Date Picker */}
+          <div className="flex items-center space-x-2">
+            <Calendar className="w-4 h-4 text-amber-400" />
+            <span className="text-slate-400 font-medium">Work Date:</span>
+            <input
+              type="date"
+              value={entryDate}
+              onChange={(e) => onEntryDateChange && onEntryDateChange(e.target.value)}
+              className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-amber-400"
+            />
+          </div>
+        </div>
+
+        {/* Row B: Location, TC, Location Type, Engineer */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
           
           {/* Location Dropdown */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
                 <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Site Location (Folder)</span>
+                <span>Site Location</span>
                 <span className="text-rose-400">*</span>
               </label>
               {!isAddingLocation && (
@@ -145,7 +195,7 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
                   className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center space-x-1 font-medium cursor-pointer"
                 >
                   <Plus className="w-3 h-3" />
-                  <span>+ New Folder</span>
+                  <span>+ New</span>
                 </button>
               )}
             </div>
@@ -180,49 +230,69 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
               <select
                 value={location}
                 onChange={(e) => onLocationChange(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-xl px-3.5 py-2.5 text-xs text-white font-medium focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-xl px-3 py-2.5 text-xs text-white font-medium focus:outline-none focus:border-emerald-500"
               >
                 {availableLocations.map((loc) => (
                   <option key={loc} value={loc}>
-                    📁 {loc}
+                    📍 {loc}
                   </option>
                 ))}
               </select>
             )}
           </div>
 
+          {/* Transformer Point Selector */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Transformer (TC Point)</span>
+            </label>
+            <select
+              value={selectedTransformerId || ''}
+              onChange={(e) => onTransformerChange && onTransformerChange(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-xl px-3 py-2.5 text-xs text-white font-medium focus:outline-none focus:border-amber-400"
+            >
+              <option value="">-- General TC Point --</option>
+              {transformers.map(t => (
+                <option key={t.id} value={t.id}>
+                  TC #{t.serialNumber} ({t.make} • {t.capacity})
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Location Type Selection (Exactly 2 categories) */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
               <Layers className="w-3.5 h-3.5 text-teal-400" />
-              <span>Location Type (Target File)</span>
+              <span>Location Type</span>
               <span className="text-rose-400">*</span>
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={() => onLocationTypeChange('In house')}
-                className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+                className={`flex items-center justify-center space-x-1.5 px-2.5 py-2.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                   locationType === 'In house'
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-emerald-400 text-white shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-emerald-400 text-white shadow-md shadow-emerald-950/40'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Home className="w-3.5 h-3.5" />
-                <span>1st: In house</span>
+                <span>In house</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => onLocationTypeChange('Maintenance')}
-                className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+                className={`flex items-center justify-center space-x-1.5 px-2.5 py-2.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                   locationType === 'Maintenance'
-                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 border-cyan-400 text-white shadow-md shadow-cyan-950/40 ring-1 ring-cyan-400'
+                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 border-cyan-400 text-white shadow-md shadow-cyan-950/40'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Wrench className="w-3.5 h-3.5" />
-                <span>2nd: Maintenance</span>
+                <span>Maint.</span>
               </button>
             </div>
           </div>
@@ -231,14 +301,14 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
               <User className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Submitted By (Engineer / Tech)</span>
+              <span>Entered By (Engineer)</span>
             </label>
             <input
               type="text"
-              placeholder="Enter Engineer Name..."
+              placeholder="e.g. Rajesh Patel"
               value={submittedBy}
               onChange={(e) => onSubmittedByChange(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+              className="w-full bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
             />
           </div>
 
@@ -261,34 +331,35 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
       />
 
       {/* 3. Bottom Action Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 sticky bottom-4 z-30">
+        
         {/* Status Message */}
         <div className="flex items-center space-x-2 text-xs">
           {saveStatus === 'syncing' && (
             <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-blue-950/60 border border-blue-500/40 text-blue-300 animate-pulse">
               <Clock className="w-3.5 h-3.5 animate-spin" />
-              <span className="font-semibold">Updating {targetFileName}...</span>
+              <span className="font-semibold">Saving &amp; Updating Central Database...</span>
             </div>
           )}
 
           {saveStatus === 'saved' && (
             <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="font-semibold">{lastSavedMessage || `Saved into ${targetFileName}!`}</span>
+              <span className="font-semibold">{lastSavedMessage || `Saved into ${cleanFolder}/${targetFileName}!`}</span>
             </div>
           )}
 
           {saveStatus === 'offline_queued' && (
             <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-950/60 border border-amber-500/40 text-amber-300">
               <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span className="font-semibold">Offline: Queued for {targetFileName}</span>
+              <span className="font-semibold">Saved locally. Cloud sync pending.</span>
             </div>
           )}
 
           {saveStatus === 'idle' && (
             <div className="flex items-center space-x-1.5 text-slate-400 text-xs">
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Target: <strong>{cleanFolder}/{targetFileName}</strong></span>
+              <span>Target File: <strong>{cleanFolder}/{targetFileName}</strong></span>
             </div>
           )}
         </div>
@@ -310,7 +381,7 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
             className="flex-1 sm:flex-none flex items-center justify-center space-x-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-950/50 cursor-pointer disabled:opacity-60"
           >
             <Save className={`w-4 h-4 ${saveStatus === 'syncing' ? 'animate-spin' : ''}`} />
-            <span>{saveStatus === 'syncing' ? 'Updating File...' : `Save into ${targetFileName}`}</span>
+            <span>{saveStatus === 'syncing' ? 'Saving Entry...' : `Save Daily Work Entry`}</span>
           </button>
         </div>
       </div>
