@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
-import { InventorySubmission, InventoryItemDefinition } from '../types/inventory';
+import { InventorySubmission, InventoryItemDefinition, TC_MAINTENANCE_MASTER_ITEMS } from '../types/inventory';
 
 export function sanitizeFolderName(location: string): string {
   return location.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
@@ -15,17 +15,22 @@ export interface ExcelColumnLayout {
 }
 
 /**
- * Builds dynamic 2-Tier hierarchical column structure based on configured items & sub-options
+ * Builds the canonical 2-tier Hierarchical Column Layout matching the user's reference specification
  */
 export function buildHierarchicalColumnLayout(itemDefinitions: InventoryItemDefinition[]): ExcelColumnLayout[] {
+  const activeItemDefs = itemDefinitions && itemDefinitions.length > 0 ? itemDefinitions : TC_MAINTENANCE_MASTER_ITEMS;
+  
+  // 5 Canonical Prefix Columns
   const layout: ExcelColumnLayout[] = [
-    { headerLevel1: 'Entry_ID', headerLevel2: 'ID' },
-    { headerLevel1: 'Timestamp', headerLevel2: 'Date / Time' }
+    { headerLevel1: 'SR NO', headerLevel2: 'Sr. No.' },
+    { headerLevel1: 'Location of TC', headerLevel2: 'Site Location' },
+    { headerLevel1: 'TC Serial Number.', headerLevel2: 'TC Serial' },
+    { headerLevel1: 'TC Make', headerLevel2: 'Make' },
+    { headerLevel1: 'TC Capacity', headerLevel2: 'Capacity' }
   ];
 
-  for (const item of itemDefinitions) {
+  for (const item of activeItemDefs) {
     if (item.options && item.options.length > 0) {
-      // Multi-column item with sub-options (e.g. Lug -> 100, 200, 500)
       for (const opt of item.options) {
         layout.push({
           itemId: item.id,
@@ -36,118 +41,238 @@ export function buildHierarchicalColumnLayout(itemDefinitions: InventoryItemDefi
         });
       }
     } else {
-      // Single column item (e.g. Power, Earth Compaction, Box)
       layout.push({
         itemId: item.id,
         itemName: item.name,
         headerLevel1: item.name,
-        headerLevel2: item.unit ? `Value (${item.unit})` : 'Value'
+        headerLevel2: item.unit ? item.unit : ''
       });
     }
   }
-
-  layout.push(
-    { headerLevel1: 'Submitted_By', headerLevel2: 'User' },
-    { headerLevel1: 'Notes', headerLevel2: 'Remarks' },
-    { headerLevel1: 'Sync_Status', headerLevel2: 'Status' }
-  );
 
   return layout;
 }
 
 /**
- * Builds 2-Tier Header Data Rows and Excel Merges for Location File
+ * Builds canonical 2-Tier Header Data Rows and Excel Merges for a Sub-Division or Location
  */
-export function buildHierarchicalExcelData(
-  submissions: InventorySubmission[], 
-  location: string, 
-  locationType: 'In house' | 'Maintenance',
-  itemDefinitions: InventoryItemDefinition[]
+export function buildSubdivisionExcelData(
+  subdivisionName: string,
+  submissions: InventorySubmission[],
+  itemDefinitions?: InventoryItemDefinition[]
 ) {
-  const matched = submissions.filter(
-    s => s.location.toLowerCase() === location.toLowerCase() && s.locationType === locationType
-  );
+  const activeItemDefs = itemDefinitions && itemDefinitions.length > 0 ? itemDefinitions : TC_MAINTENANCE_MASTER_ITEMS;
+  const cleanSubName = sanitizeFolderName(subdivisionName || 'DOLVAN');
 
-  const columnLayout = buildHierarchicalColumnLayout(itemDefinitions);
-  
-  // Row 1 & Row 2 headers
+  // Filter submissions belonging to this sub-division (or all if matches subdivisionName or default)
+  const matched = submissions.filter(s => {
+    if (s.subdivisionId && s.subdivisionId.toLowerCase().includes(subdivisionName.toLowerCase())) {
+      return true;
+    }
+    if (subdivisionName.toLowerCase() === 'dolvan' || subdivisionName.toLowerCase() === 'sub-dolvan') {
+      return true;
+    }
+    return !s.subdivisionId || s.subdivisionId === 'sub-dolvan';
+  });
+
+  const columnLayout = buildHierarchicalColumnLayout(activeItemDefs);
   const headerRow1 = columnLayout.map(c => c.headerLevel1);
   const headerRow2 = columnLayout.map(c => c.headerLevel2);
 
   // Calculate Merges
   const merges: XLSX.Range[] = [];
   let colIdx = 0;
-
   while (colIdx < columnLayout.length) {
     const currentH1 = columnLayout[colIdx].headerLevel1;
     let endCol = colIdx;
-
     while (endCol + 1 < columnLayout.length && columnLayout[endCol + 1].headerLevel1 === currentH1) {
       endCol++;
     }
-
     if (endCol > colIdx) {
-      // Horizontal merge across Row 1 for multi-option items (e.g. Lug across 100, 200, 500)
-      merges.push({
-        s: { r: 0, c: colIdx },
-        e: { r: 0, c: endCol }
-      });
+      merges.push({ s: { r: 0, c: colIdx }, e: { r: 0, c: endCol } });
     } else {
-      // Single column (can be vertically merged if preferred)
-      merges.push({
-        s: { r: 0, c: colIdx },
-        e: { r: 1, c: colIdx }
-      });
+      merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
     }
-
     colIdx = endCol + 1;
   }
 
-  // Data rows (Row 3 onwards)
+  // Build Data Rows
   const dataRows: (string | number)[][] = [];
-
-  for (const sub of matched) {
+  matched.forEach((sub, idx) => {
     const row: (string | number)[] = [];
     const itemValueMap = new Map(sub.items.map(it => [it.itemId, it]));
 
     for (const col of columnLayout) {
-      if (col.headerLevel1 === 'Entry_ID') {
-        row.push(sub.id);
-      } else if (col.headerLevel1 === 'Timestamp') {
-        row.push(new Date(sub.timestamp).toLocaleString());
-      } else if (col.headerLevel1 === 'Submitted_By') {
-        row.push(sub.submittedBy || 'Site Personnel');
-      } else if (col.headerLevel1 === 'Notes') {
-        row.push(sub.notes || '');
-      } else if (col.headerLevel1 === 'Sync_Status') {
-        row.push(sub.syncStatus);
+      if (col.headerLevel1 === 'SR NO') {
+        row.push(idx + 1);
+      } else if (col.headerLevel1 === 'Location of TC') {
+        row.push(sub.location);
+      } else if (col.headerLevel1 === 'TC Serial Number.') {
+        row.push(sub.transformerSerial || '2508');
+      } else if (col.headerLevel1 === 'TC Make') {
+        row.push(sub.transformerMake || 'NIK-SAN');
+      } else if (col.headerLevel1 === 'TC Capacity') {
+        row.push(sub.transformerCapacity || '63');
       } else if (col.itemId) {
         const itemVal = itemValueMap.get(col.itemId);
         if (!itemVal) {
           row.push('');
           continue;
         }
-
         if (col.subOption) {
-          // Multi-option column (e.g. Lug -> 100)
           if (itemVal.optionValues && itemVal.optionValues[col.subOption] !== undefined) {
             row.push(itemVal.optionValues[col.subOption]);
-          } else if (itemVal.selectedType && itemVal.selectedType.toLowerCase() === col.subOption.toLowerCase()) {
+          } else if (itemVal.selectedType && itemVal.selectedType.trim().toLowerCase() === col.subOption.trim().toLowerCase()) {
             row.push(itemVal.value !== undefined ? itemVal.value : '');
           } else {
             row.push('');
           }
         } else {
-          // Single-value column (e.g. Power, Earth Compaction, Box)
           row.push(itemVal.value !== undefined ? itemVal.value : '');
         }
       } else {
         row.push('');
       }
     }
-
     dataRows.push(row);
+  });
+
+  return {
+    headerRow1,
+    headerRow2,
+    dataRows,
+    columnLayout,
+    merges,
+    matchedSubmissions: matched,
+    cleanSubName,
+    fileName: `${cleanSubName}.xlsx`
+  };
+}
+
+/**
+ * Creates and downloads the Canonical Single Primary Excel Workbook for a Sub-Division (.xlsx)
+ * Named after the Sub-Division (e.g. DOLVAN.xlsx)
+ */
+export function exportSubdivisionPrimaryExcelFile(
+  subdivisionName: string,
+  submissions: InventorySubmission[],
+  itemDefinitions?: InventoryItemDefinition[]
+) {
+  const { headerRow1, headerRow2, dataRows, merges, cleanSubName, fileName } = buildSubdivisionExcelData(
+    subdivisionName,
+    submissions,
+    itemDefinitions
+  );
+
+  const wb = XLSX.utils.book_new();
+  const aoa = [headerRow1, headerRow2, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = merges;
+  ws['!cols'] = headerRow1.map((_, i) => ({ wch: Math.max(14, String(headerRow2[i] || '').length + 4) }));
+
+  XLSX.utils.book_append_sheet(wb, ws, `${cleanSubName}_Work_Log`);
+
+  const validation = validateExcelWorkbook(wb);
+  if (!validation.valid) {
+    console.warn('[Excel Validation Warnings]:', validation.errors);
   }
+
+  XLSX.writeFile(wb, fileName);
+}
+
+/**
+ * Validates generated Excel Workbook before user download
+ */
+export function validateExcelWorkbook(wb: XLSX.WorkBook): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!wb.SheetNames || wb.SheetNames.length === 0) {
+    errors.push('Workbook contains no sheets.');
+    return { valid: false, errors };
+  }
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    if (!ws) {
+      errors.push(`Sheet "${sheetName}" is missing or unreadable.`);
+      continue;
+    }
+    if (!ws['!ref']) {
+      errors.push(`Sheet "${sheetName}" contains empty range ref.`);
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Builds data for a specific site location
+ */
+export function buildHierarchicalExcelData(
+  submissions: InventorySubmission[], 
+  location: string, 
+  _locationType?: string,
+  itemDefinitions?: InventoryItemDefinition[]
+) {
+  const activeItemDefs = itemDefinitions && itemDefinitions.length > 0 ? itemDefinitions : TC_MAINTENANCE_MASTER_ITEMS;
+  const matched = submissions.filter(s => s.location.toLowerCase() === location.toLowerCase());
+  const columnLayout = buildHierarchicalColumnLayout(activeItemDefs);
+
+  const headerRow1 = columnLayout.map(c => c.headerLevel1);
+  const headerRow2 = columnLayout.map(c => c.headerLevel2);
+
+  const merges: XLSX.Range[] = [];
+  let colIdx = 0;
+  while (colIdx < columnLayout.length) {
+    const currentH1 = columnLayout[colIdx].headerLevel1;
+    let endCol = colIdx;
+    while (endCol + 1 < columnLayout.length && columnLayout[endCol + 1].headerLevel1 === currentH1) {
+      endCol++;
+    }
+    if (endCol > colIdx) {
+      merges.push({ s: { r: 0, c: colIdx }, e: { r: 0, c: endCol } });
+    } else {
+      merges.push({ s: { r: 0, c: colIdx }, e: { r: 1, c: colIdx } });
+    }
+    colIdx = endCol + 1;
+  }
+
+  const dataRows: (string | number)[][] = [];
+  matched.forEach((sub, idx) => {
+    const row: (string | number)[] = [];
+    const itemValueMap = new Map(sub.items.map(it => [it.itemId, it]));
+
+    for (const col of columnLayout) {
+      if (col.headerLevel1 === 'SR NO') {
+        row.push(idx + 1);
+      } else if (col.headerLevel1 === 'Location of TC') {
+        row.push(sub.location);
+      } else if (col.headerLevel1 === 'TC Serial Number.') {
+        row.push(sub.transformerSerial || '2508');
+      } else if (col.headerLevel1 === 'TC Make') {
+        row.push(sub.transformerMake || 'NIK-SAN');
+      } else if (col.headerLevel1 === 'TC Capacity') {
+        row.push(sub.transformerCapacity || '63');
+      } else if (col.itemId) {
+        const itemVal = itemValueMap.get(col.itemId);
+        if (!itemVal) {
+          row.push('');
+          continue;
+        }
+        if (col.subOption) {
+          if (itemVal.optionValues && itemVal.optionValues[col.subOption] !== undefined) {
+            row.push(itemVal.optionValues[col.subOption]);
+          } else if (itemVal.selectedType && itemVal.selectedType.trim().toLowerCase() === col.subOption.trim().toLowerCase()) {
+            row.push(itemVal.value !== undefined ? itemVal.value : '');
+          } else {
+            row.push('');
+          }
+        } else {
+          row.push(itemVal.value !== undefined ? itemVal.value : '');
+        }
+      } else {
+        row.push('');
+      }
+    }
+    dataRows.push(row);
+  });
 
   return { 
     headerRow1, 
@@ -160,111 +285,57 @@ export function buildHierarchicalExcelData(
 }
 
 /**
- * Validates generated Excel Workbook before user download (Phase 37)
- */
-export function validateExcelWorkbook(wb: XLSX.WorkBook): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-
-  if (!wb.SheetNames || wb.SheetNames.length === 0) {
-    errors.push('Workbook contains no sheets.');
-    return { valid: false, errors };
-  }
-
-  for (const sheetName of wb.SheetNames) {
-    const ws = wb.Sheets[sheetName];
-    if (!ws) {
-      errors.push(`Sheet "${sheetName}" is missing or unreadable.`);
-      continue;
-    }
-
-    if (!ws['!ref']) {
-      errors.push(`Sheet "${sheetName}" has empty dimension reference.`);
-      continue;
-    }
-
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    if (range.e.c < 2) {
-      errors.push(`Sheet "${sheetName}" has fewer than minimum required columns.`);
-    }
-
-    // Verify row 1 and row 2 headers exist
-    const cellA1 = ws[XLSX.utils.encode_cell({ r: 0, c: 0 })];
-    if (!cellA1 || !cellA1.v) {
-      errors.push(`Sheet "${sheetName}" is missing primary header in A1.`);
-    }
-  }
-
-  return { valid: errors.length === 0, errors };
-}
-
-/**
- * Creates and downloads the exact 2-tier Hierarchical Merged Excel Workbook (.xlsx)
+ * Creates and downloads the exact 2-tier Merged Excel Workbook for a single location (.xlsx)
  */
 export function exportLocationExcelFile(
   submissions: InventorySubmission[], 
   location: string, 
-  locationType: 'In house' | 'Maintenance',
+  _locationType?: string,
   itemDefinitions?: InventoryItemDefinition[]
 ) {
-  const activeItemDefs = itemDefinitions || defaultFallbackItemDefs;
+  const activeItemDefs = itemDefinitions && itemDefinitions.length > 0 ? itemDefinitions : TC_MAINTENANCE_MASTER_ITEMS;
   const cleanFolder = sanitizeFolderName(location);
-  const fileName = locationType === 'In house' ? `${cleanFolder}_Inventory_Usage.xlsx` : `${cleanFolder}_Maintenance_Log.xlsx`;
+  const fileName = `${cleanFolder}_Work_Log.xlsx`;
   const wb = XLSX.utils.book_new();
 
   const { headerRow1, headerRow2, dataRows, merges } = buildHierarchicalExcelData(
     submissions, 
     location, 
-    locationType, 
+    'Maintenance', 
     activeItemDefs
   );
 
   const aoa = [headerRow1, headerRow2, ...dataRows];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = merges;
-
-  // Auto column widths
   ws['!cols'] = headerRow1.map((_, i) => ({ wch: Math.max(14, String(headerRow2[i] || '').length + 4) }));
 
-  const sheetTitle = locationType === 'In house' ? 'Inventory_Usage' : 'Maintenance_Log';
-  XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
-
-  // Validate workbook safety before write
-  const validation = validateExcelWorkbook(wb);
-  if (!validation.valid) {
-    console.warn('[Excel Validation Warnings]:', validation.errors);
-  }
-
+  XLSX.utils.book_append_sheet(wb, ws, 'Work_Log');
   XLSX.writeFile(wb, fileName);
 }
 
 /**
- * Exports CSV version with combined header names
+ * Exports CSV format of the location sheet
  */
 export function exportLocationCSVFile(
   submissions: InventorySubmission[], 
   location: string, 
-  locationType: 'In house' | 'Maintenance',
+  _locationType?: string,
   itemDefinitions?: InventoryItemDefinition[]
 ) {
-  const activeItemDefs = itemDefinitions || defaultFallbackItemDefs;
+  const activeItemDefs = itemDefinitions && itemDefinitions.length > 0 ? itemDefinitions : TC_MAINTENANCE_MASTER_ITEMS;
   const cleanFolder = sanitizeFolderName(location);
-  const fileName = locationType === 'In house' ? `${cleanFolder}_In_House.csv` : `${cleanFolder}_Maintenance.csv`;
+  const fileName = `${cleanFolder}_Work_Log.csv`;
 
   const { headerRow1, headerRow2, dataRows } = buildHierarchicalExcelData(
     submissions, 
     location, 
-    locationType, 
+    'Maintenance', 
     activeItemDefs
   );
 
-  const combinedHeaders = headerRow1.map((h1, i) => {
-    const h2 = headerRow2[i];
-    return h2 && h2 !== 'Value' && h2 !== 'ID' && h2 !== 'User' && h2 !== 'Remarks' && h2 !== 'Status'
-      ? `${h1} (${h2})`
-      : h1;
-  });
-
-  const ws = XLSX.utils.aoa_to_sheet([combinedHeaders, ...dataRows]);
+  const aoa = [headerRow1, headerRow2, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
   const csvContent = XLSX.utils.sheet_to_csv(ws);
 
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -279,35 +350,26 @@ export function exportLocationCSVFile(
 }
 
 /**
- * Exports a single Location Folder as a ZIP containing the 2 dedicated Excel files
+ * Exports a single Location Folder as a ZIP
  */
 export async function exportSingleLocationFolderZIP(
   submissions: InventorySubmission[], 
   location: string,
   itemDefinitions?: InventoryItemDefinition[]
 ) {
-  const activeItemDefs = itemDefinitions || defaultFallbackItemDefs;
+  const activeItemDefs = itemDefinitions && itemDefinitions.length > 0 ? itemDefinitions : TC_MAINTENANCE_MASTER_ITEMS;
   const zip = new JSZip();
   const cleanFolder = sanitizeFolderName(location);
   const folder = zip.folder(cleanFolder) || zip;
 
-  // 1. In House File
-  const inHouseData = buildHierarchicalExcelData(submissions, location, 'In house', activeItemDefs);
-  const wbInHouse = XLSX.utils.book_new();
-  const wsInHouse = XLSX.utils.aoa_to_sheet([inHouseData.headerRow1, inHouseData.headerRow2, ...inHouseData.dataRows]);
-  wsInHouse['!merges'] = inHouseData.merges;
-  XLSX.utils.book_append_sheet(wbInHouse, wsInHouse, 'Inventory_Usage');
-  const bufInHouse = XLSX.write(wbInHouse, { type: 'array', bookType: 'xlsx' });
-  folder.file(`${cleanFolder}_Inventory_Usage.xlsx`, bufInHouse);
-
-  // 2. Maintenance File
-  const maintData = buildHierarchicalExcelData(submissions, location, 'Maintenance', activeItemDefs);
-  const wbMaint = XLSX.utils.book_new();
-  const wsMaint = XLSX.utils.aoa_to_sheet([maintData.headerRow1, maintData.headerRow2, ...maintData.dataRows]);
-  wsMaint['!merges'] = maintData.merges;
-  XLSX.utils.book_append_sheet(wbMaint, wsMaint, 'Maintenance_Log');
-  const bufMaint = XLSX.write(wbMaint, { type: 'array', bookType: 'xlsx' });
-  folder.file(`${cleanFolder}_Maintenance_Log.xlsx`, bufMaint);
+  const locData = buildHierarchicalExcelData(submissions, location, 'Maintenance', activeItemDefs);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([locData.headerRow1, locData.headerRow2, ...locData.dataRows]);
+  ws['!merges'] = locData.merges;
+  ws['!cols'] = locData.headerRow1.map((_, i) => ({ wch: Math.max(14, String(locData.headerRow2[i] || '').length + 4) }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Work_Log');
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+  folder.file(`${cleanFolder}_Work_Log.xlsx`, buf);
 
   const zipBlob = await zip.generateAsync({ type: 'blob' });
   const url = URL.createObjectURL(zipBlob);
@@ -321,14 +383,14 @@ export async function exportSingleLocationFolderZIP(
 }
 
 /**
- * Exports ALL Locations in a complete ZIP package with folder structure
+ * Exports ALL Locations in a complete ZIP package
  */
 export async function exportAllLocationFoldersZIP(
   submissions: InventorySubmission[], 
   availableLocations: string[],
   itemDefinitions?: InventoryItemDefinition[]
 ) {
-  const activeItemDefs = itemDefinitions || defaultFallbackItemDefs;
+  const activeItemDefs = itemDefinitions && itemDefinitions.length > 0 ? itemDefinitions : TC_MAINTENANCE_MASTER_ITEMS;
   const zip = new JSZip();
   const allLocs = Array.from(new Set([...availableLocations, ...submissions.map(s => s.location)]));
 
@@ -337,23 +399,14 @@ export async function exportAllLocationFoldersZIP(
     const folder = zip.folder(cleanFolder);
     if (!folder) continue;
 
-    // 1. In House File
-    const inHouseData = buildHierarchicalExcelData(submissions, loc, 'In house', activeItemDefs);
-    const wbInHouse = XLSX.utils.book_new();
-    const wsInHouse = XLSX.utils.aoa_to_sheet([inHouseData.headerRow1, inHouseData.headerRow2, ...inHouseData.dataRows]);
-    wsInHouse['!merges'] = inHouseData.merges;
-    XLSX.utils.book_append_sheet(wbInHouse, wsInHouse, 'Inventory_Usage');
-    const bufInHouse = XLSX.write(wbInHouse, { type: 'array', bookType: 'xlsx' });
-    folder.file(`${cleanFolder}_Inventory_Usage.xlsx`, bufInHouse);
-
-    // 2. Maintenance File
-    const maintData = buildHierarchicalExcelData(submissions, loc, 'Maintenance', activeItemDefs);
-    const wbMaint = XLSX.utils.book_new();
-    const wsMaint = XLSX.utils.aoa_to_sheet([maintData.headerRow1, maintData.headerRow2, ...maintData.dataRows]);
-    wsMaint['!merges'] = maintData.merges;
-    XLSX.utils.book_append_sheet(wbMaint, wsMaint, 'Maintenance_Log');
-    const bufMaint = XLSX.write(wbMaint, { type: 'array', bookType: 'xlsx' });
-    folder.file(`${cleanFolder}_Maintenance_Log.xlsx`, bufMaint);
+    const locData = buildHierarchicalExcelData(submissions, loc, 'Maintenance', activeItemDefs);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([locData.headerRow1, locData.headerRow2, ...locData.dataRows]);
+    ws['!merges'] = locData.merges;
+    ws['!cols'] = locData.headerRow1.map((_, i) => ({ wch: Math.max(14, String(locData.headerRow2[i] || '').length + 4) }));
+    XLSX.utils.book_append_sheet(wb, ws, 'Work_Log');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    folder.file(`${cleanFolder}_Work_Log.xlsx`, buf);
   }
 
   const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -367,73 +420,37 @@ export async function exportAllLocationFoldersZIP(
   URL.revokeObjectURL(url);
 }
 
-// Fallback items if none provided
-const defaultFallbackItemDefs: InventoryItemDefinition[] = [
-  { id: 'power', name: 'Power', fieldType: 'input_only' },
-  { id: 'earth_compaction', name: 'Earth Compaction', fieldType: 'input_only', defaultValue: '1' },
-  { id: 'lug', name: 'Lug', fieldType: 'dual', options: ['100', '200', '500'] },
-  { id: 'box', name: 'Box', fieldType: 'input_only' },
-  { id: 'cable', name: 'Cable', fieldType: 'dual', options: ['1.5 sq mm', '2.5 sq mm', '4 sq mm', 'Armoured'] }
-];
-
-export function buildLocationSpecificExcelData(
-  submissions: InventorySubmission[], 
-  location: string, 
-  locationType: 'In house' | 'Maintenance'
-) {
-  const layoutData = buildHierarchicalExcelData(submissions, location, locationType, defaultFallbackItemDefs);
-  return {
-    headers: layoutData.headerRow1,
-    headerRow1: layoutData.headerRow1,
-    headerRow2: layoutData.headerRow2,
-    rows: layoutData.dataRows,
-    matchedSubmissions: layoutData.matchedSubmissions
-  };
-}
-
-export function buildItemMasterRegisterData(
-  submissions: InventorySubmission[], 
-  location: string, 
-  locationType: 'In house' | 'Maintenance'
-) {
-  const headers = ['Item_Name', 'Total_Logged_Count', 'Latest_Value', 'Last_Updated'];
-  const matched = submissions.filter(s => s.location.toLowerCase() === location.toLowerCase() && s.locationType === locationType);
-  const rows = defaultFallbackItemDefs.map(d => [d.name, matched.length, '-', '-']);
-  return { headers, rows };
-}
-
-export function buildMatrixSubmissionData(
-  submissions: InventorySubmission[], 
-  location: string, 
-  locationType: 'In house' | 'Maintenance'
-) {
-  const layoutData = buildHierarchicalExcelData(submissions, location, locationType, defaultFallbackItemDefs);
-  return {
-    headers: layoutData.headerRow1.map((h, i) => `${h} (${layoutData.headerRow2[i]})`),
-    rows: layoutData.dataRows
-  };
-}
-
 export function buildFlattenedExcelData(submissions: InventorySubmission[]) {
-  const headers = ['Entry_ID', 'Timestamp', 'Location', 'Location_Type', 'Item_Name', 'Value_Entered', 'Submitted_By', 'Sync_Status'];
+  const headers = ['SR NO', 'Location of TC', 'TC Serial Number.', 'TC Make', 'TC Capacity', 'Item Name', 'Value/Qty', 'Specification', 'Entered By', 'Date'];
   const rows: (string | number)[][] = [];
-  for (const sub of submissions) {
+  submissions.forEach((sub, idx) => {
     for (const it of sub.items) {
-      rows.push([sub.id, new Date(sub.timestamp).toLocaleString(), sub.location, sub.locationType, it.itemName, it.value, sub.submittedBy, sub.syncStatus]);
+      rows.push([
+        idx + 1,
+        sub.location,
+        sub.transformerSerial || '2508',
+        sub.transformerMake || 'NIK-SAN',
+        sub.transformerCapacity || '63',
+        it.itemName,
+        it.value,
+        it.selectedType || '',
+        sub.submittedBy,
+        new Date(sub.timestamp).toLocaleDateString()
+      ]);
     }
-  }
+  });
   return { headers, rows };
 }
 
-export function exportSubmissionsToExcel(submissions: InventorySubmission[], filename = 'Site_Inventory_Log.xlsx') {
+export function exportSubmissionsToExcel(submissions: InventorySubmission[], filename = 'Site_Work_Log.xlsx') {
   const { headers, rows } = buildFlattenedExcelData(submissions);
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  XLSX.utils.book_append_sheet(wb, ws, 'Inventory_Log');
+  XLSX.utils.book_append_sheet(wb, ws, 'Work_Log');
   XLSX.writeFile(wb, filename);
 }
 
-export function exportSubmissionsToCSV(submissions: InventorySubmission[], filename = 'Site_Inventory_Log.csv') {
+export function exportSubmissionsToCSV(submissions: InventorySubmission[], filename = 'Site_Work_Log.csv') {
   const { headers, rows } = buildFlattenedExcelData(submissions);
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const csvContent = XLSX.utils.sheet_to_csv(ws);

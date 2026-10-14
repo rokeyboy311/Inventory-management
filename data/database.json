@@ -8,6 +8,14 @@
       "googleDriveFolderId": "gdrive-folder-vyara",
       "createdAt": "2026-10-08T13:01:34.748Z",
       "updatedAt": "2026-10-08T13:01:34.748Z"
+    },
+    {
+      "id": "div-1791838553122",
+      "name": "SONGADH",
+      "code": "SND",
+      "status": "active",
+      "createdAt": "2026-10-12T20:55:53.122Z",
+      "updatedAt": "2026-10-12T20:55:53.122Z"
     }
   ],
   "subdivisions": [
@@ -20,6 +28,15 @@
       "googleDriveFolderId": "gdrive-folder-dolvan",
       "createdAt": "2026-10-08T13:01:34.748Z",
       "updatedAt": "2026-10-08T13:01:34.748Z"
+    },
+    {
+      "id": "sub-1791838561387",
+      "divisionId": "div-1791838553122",
+      "name": "UKAI",
+      "code": "UKI",
+      "status": "active",
+      "createdAt": "2026-10-12T20:56:01.387Z",
+      "updatedAt": "2026-10-12T20:56:01.387Z"
     }
   ],
   "locations": [
@@ -356,6 +373,30 @@
     }
   ],
   "dailyEntries": [
+    {
+      "id": "INV-20261012-373",
+      "divisionId": "div-vyara",
+      "subdivisionId": "sub-dolvan",
+      "locationId": "loc-kandha-konchal",
+      "entryDate": "2026-10-12",
+      "enteredBy": "Rajesh Patel",
+      "locationType": "Maintenance",
+      "version": 1,
+      "syncStatus": "Synced",
+      "items": [
+        {
+          "id": "item-INV-20261012-373-1",
+          "entryId": "INV-20261012-373",
+          "materialId": "mat-bushing-goti",
+          "materialName": "Replacement of  bushing goti",
+          "variantName": "HT",
+          "quantity": 4,
+          "unit": "Nos."
+        }
+      ],
+      "createdAt": "2026-10-12T20:56:20.893Z",
+      "updatedAt": "2026-10-12T20:56:20.893Z"
+    },
     {
       "id": "ENTRY-20261008-119",
       "divisionId": "div-vyara",
@@ -729,6 +770,23 @@
       "enteredBy": "Test Engineer",
       "notes": "Used for daily work at KANDHA KONCHAL",
       "createdAt": "2026-10-08T13:01:48.439Z"
+    },
+    {
+      "id": "TX-OUT-INV-20261012-373-1",
+      "materialId": "mat-bushing-goti",
+      "materialName": "Replacement of  bushing goti",
+      "variantName": "HT",
+      "type": "OUT",
+      "quantity": 4,
+      "unit": "Nos.",
+      "referenceType": "daily_entry",
+      "referenceId": "INV-20261012-373",
+      "divisionId": "div-vyara",
+      "subdivisionId": "sub-dolvan",
+      "locationId": "loc-kandha-konchal",
+      "date": "2026-10-12",
+      "enteredBy": "Rajesh Patel",
+      "createdAt": "2026-10-12T20:56:20.893Z"
     }
   ],
   "fileRegistry": [
@@ -874,6 +932,76 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "AUDIT-1791838561387-190",
+      "user": "Admin",
+      "action": "CREATE_SUBDIVISION",
+      "entity": "SubDivision",
+      "entityId": "sub-1791838561387",
+      "oldValue": null,
+      "newValue": {
+        "id": "sub-1791838561387",
+        "divisionId": "div-1791838553122",
+        "name": "UKAI",
+        "code": "UKI",
+        "status": "active",
+        "createdAt": "2026-10-12T20:56:01.387Z",
+        "updatedAt": "2026-10-12T20:56:01.387Z"
+      },
+      "timestamp": "2026-10-12T20:56:01.387Z"
+    },
+    {
+      "id": "AUDIT-1791838553123-424",
+      "user": "Admin",
+      "action": "CREATE_DIVISION",
+      "entity": "Division",
+      "entityId": "div-1791838553122",
+      "oldValue": null,
+      "newValue": {
+        "id": "div-1791838553122",
+        "name": "SONGADH",
+        "code": "SND",
+        "status": "active",
+        "createdAt": "2026-10-12T20:55:53.122Z",
+        "updatedAt": "2026-10-12T20:55:53.122Z"
+      },
+      "timestamp": "2026-10-12T20:55:53.123Z"
+    },
+    {
+      "id": "AUDIT-1791835529559-593",
+      "user": "Admin",
+      "action": "CREATE_SUBDIVISION",
+      "entity": "SubDivision",
+      "entityId": "sub-1791835529559",
+      "oldValue": null,
+      "newValue": {
+        "id": "sub-1791835529559",
+        "divisionId": "div-vyara",
+        "name": "UKAI",
+        "code": "UKI",
+        "status": "active",
+        "createdAt": "2026-10-12T20:05:29.559Z",
+        "updatedAt": "2026-10-12T20:05:29.559Z"
+      },
+      "timestamp": "2026-10-12T20:05:29.559Z"
+    },
+    {
+      "id": "AUDIT-1791835529541-610",
+      "user": "Admin",
+      "action": "CREATE_DIVISION",
+      "entity": "Division",
+      "entityId": "div-1791835529541",
+      "oldValue": null,
+      "newValue": {
+        "id": "div-1791835529541",
+        "name": "SONGADH",
+        "code": "SNG",
+        "status": "active",
+        "createdAt": "2026-10-12T20:05:29.541Z",
+        "updatedAt": "2026-10-12T20:05:29.541Z"
+      },
+      "timestamp": "2026-10-12T20:05:29.541Z"
+    },
     {
       "id": "AUDIT-INIT-001",
       "user": "System Admin",

@@ -95,24 +95,24 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden space-y-0">
+    <div className="bg-[#1c1c1f] border border-[rgba(226,226,231,0.12)] overflow-hidden space-y-0 font-terminal">
       
       {/* PRESET SWITCHER & FORMAT BANNER */}
-      <div className="px-5 py-3 bg-slate-950 border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-5 py-3 bg-[#111113] border-b border-[rgba(226,226,231,0.12)] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center space-x-2">
-          <span className="text-xs font-bold text-slate-300">Select Template Format:</span>
-          <div className="flex items-center space-x-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-[rgba(226,226,231,0.4)]">Template:</span>
+          <div className="flex items-center space-x-1 bg-[#1c1c1f] p-1 border border-[rgba(226,226,231,0.15)]">
             <button
               type="button"
               onClick={() => onSwitchPreset && onSwitchPreset('rudra_18')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+              className={`px-3 py-1 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 font-terminal uppercase ${
                 activePreset === 'rudra_18'
-                  ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-[#00ffaa] text-[#111113]'
+                  : 'text-[rgba(226,226,231,0.6)] hover:text-white'
               }`}
             >
-              <Zap className="w-3.5 h-3.5 text-yellow-300" />
-              <span>Rudra Electrical (18 Items PDF Format)</span>
+              <Zap className="w-3.5 h-3.5" />
+              <span>Rudra Electrical (18 Items Format)</span>
             </button>
 
             <button

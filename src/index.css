@@ -1,1 +1,48 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg: #111113;
+    --ink: #e2e2e7;
+    --accent: #00ffaa;
+    --accent-cyan: #00ccff;
+    --ink-faint: rgba(226, 226, 231, 0.12);
+    --ink-muted: rgba(226, 226, 231, 0.4);
+    --surface: #1c1c1f;
+    --surface-hover: #242429;
+  }
+
+  body {
+    background-color: #111113;
+    color: #e2e2e7;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.font-display {
+  font-family: 'Oswald', sans-serif;
+}
+
+.font-terminal {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom terminal scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #111113;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(226, 226, 231, 0.15);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00ffaa;
+}

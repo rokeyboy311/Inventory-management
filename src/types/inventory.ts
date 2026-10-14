@@ -153,9 +153,11 @@ export interface InventorySubmission {
   subdivisionId?: string;
   locationId?: string;
   location: string;
-  locationType: 'In house' | 'Maintenance';
+  locationType?: 'In house' | 'Maintenance';
   transformerId?: string;
   transformerSerial?: string;
+  transformerMake?: string;
+  transformerCapacity?: string;
   submittedBy: string;
   notes?: string;
   version?: number;
@@ -351,214 +353,219 @@ export const STANDARD_5_ITEMS: InventoryItemDefinition[] = [
   }
 ];
 
-export const RUDRA_ELECTRICAL_18_ITEMS: InventoryItemDefinition[] = [
+export const TC_MAINTENANCE_MASTER_ITEMS: InventoryItemDefinition[] = [
   {
-    id: 'mat-bushing',
-    name: 'Replacement of bushing goti',
+    id: 'mat-bushing-goti',
+    name: 'Replacement of  bushing goti',
     category: 'Bushing',
     fieldType: 'dual',
-    defaultValue: '4',
-    inputPlaceholder: 'Enter quantity',
-    dropdownPlaceholder: 'Select type (HT / LT)',
     options: ['HT', 'LT'],
     unit: 'Nos.',
+    inputPlaceholder: 'Enter count',
+    dropdownPlaceholder: 'HT / LT',
     isDeletable: false,
     status: 'active'
   },
   {
     id: 'mat-al-patta',
     name: 'Providing LT side AL. Patta KVA',
-    category: 'Busbar & Leads',
+    category: 'Busbar',
     fieldType: 'dual',
-    defaultValue: '4',
-    inputPlaceholder: 'Enter quantity',
-    dropdownPlaceholder: 'Select rating',
-    options: ['100 KVA', '63 KVA', '25 KVA'],
+    options: ['100'],
     unit: 'Nos.',
+    inputPlaceholder: 'Enter count',
+    dropdownPlaceholder: '100',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-earth',
+    id: 'mat-earth-connection',
     name: 'Check and Tight Earth Connection',
     category: 'Earthing',
     fieldType: 'input_only',
     defaultValue: '1',
-    inputPlaceholder: 'Enter job count',
-    unit: 'Job',
+    inputPlaceholder: '1 [Default]',
+    unit: 'Nos.',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-cable',
+    id: 'mat-lt-cable',
     name: 'Replacement of LT damaged cable',
     category: 'Cabling',
     fieldType: 'dual',
-    defaultValue: '25',
-    inputPlaceholder: 'Enter length',
-    dropdownPlaceholder: 'Select cable size',
-    options: ['C-1 (70 sq mm)', 'C-2 (150 sq mm)', '25 sq mm'],
-    unit: 'Meter',
+    options: ['Nos.', 'C- 1(70)', 'C- 2(150)'],
+    unit: 'Mtr',
+    inputPlaceholder: 'Enter length / count',
+    dropdownPlaceholder: 'Select specification',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-termination',
-    name: 'Providing of new termination R,Y,B,N',
+    id: 'mat-termination-core',
+    name: 'Providing of new termination in form of R,Y,B and N core including PVC tape',
     category: 'Termination',
     fieldType: 'dual',
-    defaultValue: '1',
-    inputPlaceholder: 'Enter quantity',
-    dropdownPlaceholder: 'Select termination size',
-    options: ['70 sq mm (4-Core)', '150 sq mm (4-Core)', 'Up to spec'],
+    options: ['70', '150'],
     unit: 'Sets',
+    inputPlaceholder: 'Enter sets',
+    dropdownPlaceholder: '70 / 150',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-term-upsqmm',
+    id: 'mat-termination-upto-sqmm',
     name: 'Providing of termination up to sq mm cable',
     category: 'Termination',
-    fieldType: 'dual',
+    fieldType: 'input_only',
     defaultValue: '1',
     inputPlaceholder: 'Enter count',
-    options: ['Up to 70 sq mm', 'Up to 150 sq mm', 'Up to 300 sq mm'],
     unit: 'Sets',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-stud',
-    name: 'Half Stud / Fasteners',
-    category: 'Hardware',
-    fieldType: 'input_only',
-    defaultValue: '4',
-    inputPlaceholder: 'Enter count',
-    unit: 'Nos.',
-    isDeletable: false,
-    status: 'active'
-  },
-  {
-    id: 'mat-breather',
-    name: 'Breather & Silica Gel',
-    category: 'Maintenance',
-    fieldType: 'dual',
-    defaultValue: '1',
-    inputPlaceholder: 'Enter quantity',
-    dropdownPlaceholder: 'Select type',
-    options: ['Silica Gel Refill', 'Complete Breather'],
-    unit: 'Kg',
-    isDeletable: false,
-    status: 'active'
-  },
-  {
-    id: 'mat-oil-filtration',
-    name: 'Transformer Oil Top-up / Filtration',
-    category: 'Insulation',
-    fieldType: 'input_only',
-    defaultValue: '15',
-    inputPlaceholder: 'Enter litres',
-    unit: 'Litres',
-    isDeletable: false,
-    status: 'active'
-  },
-  {
-    id: 'mat-ht-rod',
-    name: 'Replacement of HT Bushing Rod & Nut',
-    category: 'Bushing Hardware',
-    fieldType: 'input_only',
-    defaultValue: '3',
-    inputPlaceholder: 'Enter count',
-    unit: 'Nos.',
-    isDeletable: false,
-    status: 'active'
-  },
-  {
-    id: 'mat-lt-rod',
-    name: 'Replacement of LT Bushing Rod & Nut',
-    category: 'Bushing Hardware',
-    fieldType: 'input_only',
-    defaultValue: '4',
-    inputPlaceholder: 'Enter count',
-    unit: 'Nos.',
-    isDeletable: false,
-    status: 'active'
-  },
-  {
-    id: 'mat-arching-horn',
-    name: 'Providing & Fixing Arching Horn',
-    category: 'Protection',
-    fieldType: 'dual',
-    defaultValue: '3',
-    options: ['HT Side', 'LT Side'],
-    unit: 'Sets',
-    isDeletable: false,
-    status: 'active'
-  },
-  {
-    id: 'mat-painting',
-    name: 'Painting of Transformer Body & Radiator',
-    category: 'Painting',
+    id: 'mat-voltage-amp-measurement',
+    name: 'Measurement and voltage ampeare',
+    category: 'Testing',
     fieldType: 'input_only',
     defaultValue: '1',
-    inputPlaceholder: '1 [Job completed]',
+    inputPlaceholder: '1 [Checked]',
     unit: 'Job',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-gasket',
-    name: 'Gasket Replacement (Top Cover / Bushing)',
-    category: 'Gaskets',
+    id: 'mat-oil-leakage',
+    name: 'Check oil leakage and fill up',
+    category: 'Insulation',
     fieldType: 'dual',
-    defaultValue: '1',
-    options: ['Top Cover Cork', 'Bushing Ring Gasket', 'Oil Gauge Gasket'],
-    unit: 'Sets',
+    options: ['Ltr'],
+    unit: 'Ltr',
+    inputPlaceholder: 'Enter oil liters',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-box',
-    name: 'Distribution Terminal Box',
+    id: 'mat-lt-dist-box',
+    name: 'Replacement of detoriarated /providing LT dist. Box with new above to 100 KVA capacity',
     category: 'Enclosures',
     fieldType: 'input_only',
-    defaultValue: '1',
+    defaultValue: '0',
+    inputPlaceholder: '0 or count',
+    unit: 'Nos.',
+    isDeletable: false,
+    status: 'active'
+  },
+  {
+    id: 'mat-kit-ket-fuse',
+    name: 'Checking and replacement of Kit-Ket fuse if required',
+    category: 'Protection',
+    fieldType: 'dual',
+    options: ['100Amp', '200Amp'],
+    unit: 'Nos.',
+    inputPlaceholder: 'Enter fuse count',
+    dropdownPlaceholder: '100Amp / 200Amp',
+    isDeletable: false,
+    status: 'active'
+  },
+  {
+    id: 'mat-hrc-fuse-base',
+    name: 'Replacement of HRC Fuse Base',
+    category: 'Protection',
+    fieldType: 'dual',
+    options: ['400'],
+    unit: 'Nos.',
+    inputPlaceholder: 'Enter count',
+    isDeletable: false,
+    status: 'active'
+  },
+  {
+    id: 'mat-hrc-fuse-link',
+    name: 'Replacement of HRC Fuse Link',
+    category: 'Protection',
+    fieldType: 'dual',
+    options: ['400'],
+    unit: 'Nos.',
+    inputPlaceholder: 'Enter count',
+    isDeletable: false,
+    status: 'active'
+  },
+  {
+    id: 'mat-fuse-element-do',
+    name: 'Providing of Fuse elemant (D.O.)',
+    category: 'Protection',
+    fieldType: 'input_only',
     inputPlaceholder: 'Enter count',
     unit: 'Nos.',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-neutral-earth',
-    name: 'Neutral Earthing Test & Renovation',
-    category: 'Earthing',
+    id: 'mat-sundry-items',
+    name: 'Providing of Sundry items (Nut,Bolt,Washer)',
+    category: 'Hardware',
     fieldType: 'input_only',
-    defaultValue: '1',
-    inputPlaceholder: 'Enter job count',
-    unit: 'Job',
+    inputPlaceholder: 'Enter sets/count',
+    unit: 'Sets',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-lugs-crimp',
-    name: 'HT / LT Cable Lugs Crimp & Insulation',
-    category: 'Cabling',
+    id: 'mat-general-condition',
+    name: 'General Condition',
+    category: 'Inspection',
+    fieldType: 'input_only',
+    defaultValue: '3',
+    inputPlaceholder: 'Enter condition code',
+    unit: 'Status',
+    isDeletable: false,
+    status: 'active'
+  },
+  {
+    id: 'mat-brass-nuts',
+    name: 'LT Side Brass Nuts',
+    category: 'Hardware',
     fieldType: 'dual',
-    defaultValue: '4',
-    options: ['70 sq mm', '150 sq mm', '300 sq mm'],
+    options: ['12 mm'],
     unit: 'Nos.',
+    inputPlaceholder: 'Enter count',
     isDeletable: false,
     status: 'active'
   },
   {
-    id: 'mat-overhauling',
-    name: 'General Overhauling & Servicing Charge',
-    category: 'Service',
-    fieldType: 'input_only',
-    defaultValue: '1',
-    inputPlaceholder: '1 [Job completed]',
-    unit: 'Job',
+    id: 'mat-brass-washer',
+    name: 'LT Side Brass Washer',
+    category: 'Hardware',
+    fieldType: 'dual',
+    options: ['12 mm'],
+    unit: 'Nos.',
+    inputPlaceholder: 'Enter count',
+    isDeletable: false,
+    status: 'active'
+  },
+  {
+    id: 'mat-breather-silica',
+    name: 'Breather',
+    category: 'Maintenance',
+    fieldType: 'dual',
+    options: ['500 gm'],
+    unit: 'Nos.',
+    inputPlaceholder: 'Enter count',
+    isDeletable: false,
+    status: 'active'
+  },
+  {
+    id: 'mat-half-stud',
+    name: 'HALF STUD',
+    category: 'Hardware',
+    fieldType: 'dual',
+    options: ['12 MM'],
+    unit: 'Nos.',
+    inputPlaceholder: 'Enter count',
     isDeletable: false,
     status: 'active'
   }
 ];
+
+export const RUDRA_ELECTRICAL_18_ITEMS = TC_MAINTENANCE_MASTER_ITEMS;

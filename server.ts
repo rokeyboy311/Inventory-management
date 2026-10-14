@@ -230,6 +230,211 @@ export function generateLocationReadingsExcel(locationId: string) {
   return { headersRow1, headersRow2, merges, dataRows, locName };
 }
 
+/**
+ * Generates the Canonical Single Primary Excel Workbook for a Sub-Division
+ * Named after the Sub-Division (e.g. DOLVAN.xlsx)
+ * Contains:
+ * Sheet 1: Material Consumption & Work Usage (Hierarchical Merged Headers)
+ * Sheet 2: TC Volt-Amp Readings
+ */
+export function generateSubdivisionUsageWorkbook(subdivisionId: string) {
+  const db = DatabaseStore.get();
+  const sub = db.subdivisions.find(s => s.id === subdivisionId || s.name.toLowerCase() === subdivisionId.toLowerCase());
+  const subName = sub ? sub.name : 'SUB_DIVISION';
+  const cleanSubName = sanitizeFolderName(subName);
+
+  // All entries belonging to locations inside this sub-division
+  const subLocations = db.locations.filter(l => l.subdivisionId === sub?.id);
+  const subLocationIds = new Set(subLocations.map(l => l.id));
+  const entries = db.dailyEntries.filter(e => subLocationIds.has(e.locationId) || e.subdivisionId === sub?.id);
+
+  // Sheet 1 Headers (Exact Reference structure from DOLVAN INVENTERY.xlsx Sheet 1)
+  const headersRow1 = [
+    'SR NO',
+    'Location of TC',
+    'TC Serial Number',
+    'Date',
+    'Type',
+    'Replacement of bushing goti',
+    'Replacement of bushing goti',
+    'Providing LT side AL. Patta KVA',
+    'Check and Tight Earth Connection',
+    'Replacement of LT damaged cable',
+    'Replacement of LT damaged cable',
+    'Providing of new termination R,Y,B,N',
+    'Providing of new termination R,Y,B,N',
+    'Half Stud',
+    'Silica Gel / Breather',
+    'Remarks',
+    'Entered By'
+  ];
+
+  const headersRow2 = [
+    'No.',
+    'Site Name',
+    'TC No.',
+    'Date',
+    'Category',
+    'HT',
+    'LT',
+    '100 KVA',
+    'Nos.',
+    'C-1(70)',
+    'C-2(150)',
+    '70',
+    '150',
+    'M.S.',
+    'Kg',
+    'Notes',
+    'User'
+  ];
+
+  const merges1: XLSX.Range[] = [
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+    { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
+    { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } },
+    { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } }, // Bushing HT/LT
+    { s: { r: 0, c: 7 }, e: { r: 1, c: 7 } },
+    { s: { r: 0, c: 8 }, e: { r: 1, c: 8 } },
+    { s: { r: 0, c: 9 }, e: { r: 0, c: 10 } }, // Cable 70/150
+    { s: { r: 0, c: 11 }, e: { r: 0, c: 12 } }, // Termination 70/150
+    { s: { r: 0, c: 13 }, e: { r: 1, c: 13 } },
+    { s: { r: 0, c: 14 }, e: { r: 1, c: 14 } },
+    { s: { r: 0, c: 15 }, e: { r: 1, c: 15 } },
+    { s: { r: 0, c: 16 }, e: { r: 1, c: 16 } }
+  ];
+
+  const dataRows1: (string | number)[][] = [];
+  entries.forEach((entry, idx) => {
+    const loc = db.locations.find(l => l.id === entry.locationId);
+    const tc = db.transformers.find(t => t.id === entry.transformerId);
+    const itemMap = new Map<string, number>();
+
+    entry.items.forEach(it => {
+      const key = `${it.materialId}:${it.variantName || ''}`.toLowerCase();
+      itemMap.set(key, (itemMap.get(key) || 0) + it.quantity);
+      itemMap.set(it.materialId.toLowerCase(), (itemMap.get(it.materialId.toLowerCase()) || 0) + it.quantity);
+      if (it.materialName) {
+        itemMap.set(it.materialName.toLowerCase(), (itemMap.get(it.materialName.toLowerCase()) || 0) + it.quantity);
+      }
+    });
+
+    dataRows1.push([
+      idx + 1,
+      loc ? loc.name : entry.locationId,
+      tc ? tc.serialNumber : 'General TC',
+      entry.entryDate,
+      entry.locationType,
+      itemMap.get('mat-bushing:ht') || itemMap.get('bushing:ht') || '',
+      itemMap.get('mat-bushing:lt') || itemMap.get('bushing:lt') || '',
+      itemMap.get('mat-al-patta:100 kva') || itemMap.get('mat-al-patta') || '',
+      itemMap.get('mat-earth:tighten & test') || itemMap.get('mat-earth') || '',
+      itemMap.get('mat-cable:c-1 (70 sq mm)') || itemMap.get('mat-cable:70') || '',
+      itemMap.get('mat-cable:c-2 (150 sq mm)') || itemMap.get('mat-cable:150') || '',
+      itemMap.get('mat-termination:70 sq mm (4-core)') || '',
+      itemMap.get('mat-termination:150 sq mm (4-core)') || '',
+      itemMap.get('mat-stud:standard m.s.') || itemMap.get('mat-stud') || '',
+      itemMap.get('mat-breather:silica gel replenish') || itemMap.get('mat-breather') || '',
+      entry.remarks || '',
+      entry.enteredBy
+    ]);
+  });
+
+  // Sheet 2: Readings for this Sub-Division
+  const readings = db.transformerReadings.filter(r => subLocationIds.has(r.locationId) || r.subdivisionId === sub?.id);
+  const headersRowRead1 = [
+    'Sr. no.',
+    'Location',
+    'Make',
+    'TC Serial No.',
+    'Capacity',
+    'Date / Time',
+    'Voltage',
+    'Voltage',
+    'Voltage',
+    'Ampere',
+    'Ampere',
+    'Ampere',
+    'Ampere',
+    'Entered By',
+    'Remark'
+  ];
+
+  const headersRowRead2 = [
+    'No.',
+    'Site',
+    'Make',
+    'Serial',
+    'KVA',
+    'Timestamp',
+    'RN',
+    'YN',
+    'BN',
+    'R',
+    'Y',
+    'B',
+    'N',
+    'Technician',
+    'Status'
+  ];
+
+  const merges2: XLSX.Range[] = [
+    { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+    { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+    { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+    { s: { r: 0, c: 3 }, e: { r: 1, c: 3 } },
+    { s: { r: 0, c: 4 }, e: { r: 1, c: 4 } },
+    { s: { r: 0, c: 5 }, e: { r: 1, c: 5 } },
+    { s: { r: 0, c: 6 }, e: { r: 0, c: 8 } },
+    { s: { r: 0, c: 9 }, e: { r: 0, c: 12 } },
+    { s: { r: 0, c: 13 }, e: { r: 1, c: 13 } },
+    { s: { r: 0, c: 14 }, e: { r: 1, c: 14 } }
+  ];
+
+  const dataRowsRead: (string | number)[][] = readings.map((r, i) => [
+    i + 1,
+    r.locationName,
+    r.transformerMake,
+    r.transformerSerial,
+    r.transformerCapacity,
+    `${r.readingDate} ${r.readingTime || ''}`.trim(),
+    r.voltageRN,
+    r.voltageYN,
+    r.voltageBN,
+    r.ampereR,
+    r.ampereY,
+    r.ampereB,
+    r.ampereN,
+    r.enteredBy,
+    r.remarks || ''
+  ]);
+
+  const wb = XLSX.utils.book_new();
+
+  const ws1 = XLSX.utils.aoa_to_sheet([headersRow1, headersRow2, ...dataRows1]);
+  ws1['!merges'] = merges1;
+  ws1['!cols'] = headersRow1.map((_, i) => ({ wch: Math.max(14, String(headersRow2[i] || '').length + 4) }));
+  XLSX.utils.book_append_sheet(wb, ws1, 'Material_Consumption');
+
+  const ws2 = XLSX.utils.aoa_to_sheet([headersRowRead1, headersRowRead2, ...dataRowsRead]);
+  ws2['!merges'] = merges2;
+  ws2['!cols'] = headersRowRead1.map((_, i) => ({ wch: Math.max(12, String(headersRowRead2[i] || '').length + 4) }));
+  XLSX.utils.book_append_sheet(wb, ws2, 'Volt_Amp_Readings');
+
+  return {
+    wb,
+    subName,
+    cleanSubName,
+    fileName: `${cleanSubName}.xlsx`,
+    totalEntries: entries.length,
+    totalReadings: readings.length,
+    entries,
+    readings
+  };
+}
+
 // -------------------------------------------------------------
 // REST API Endpoints
 // -------------------------------------------------------------
@@ -310,6 +515,32 @@ app.put('/api/divisions/:id', (req: Request, res: Response) => {
   res.json({ success: true, division: div });
 });
 
+// Safe Protected Deletion of Division
+app.delete('/api/divisions/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = DatabaseStore.get();
+  const index = db.divisions.findIndex(d => d.id === id);
+  if (index === -1) return res.status(404).json({ success: false, error: 'Division not found' });
+
+  // Safety check: protect division containing linked sub-divisions or locations
+  const linkedSubdivisions = db.subdivisions.filter(s => s.divisionId === id);
+  const linkedLocations = db.locations.filter(l => l.divisionId === id);
+
+  if (linkedSubdivisions.length > 0 || linkedLocations.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: `Cannot delete Division: contains ${linkedSubdivisions.length} sub-divisions and ${linkedLocations.length} locations. Remove child folders first to prevent data loss.`
+    });
+  }
+
+  const deleted = db.divisions.splice(index, 1)[0];
+  DatabaseStore.saveToDisk();
+  DatabaseStore.logAudit(req.body.user || 'Admin', 'DELETE_DIVISION', 'Division', id, deleted, null);
+  broadcastSync({ id }, 'DIVISION_DELETED');
+
+  return res.json({ success: true, message: `Division "${deleted.name}" removed safely.`, deleted });
+});
+
 // 3. Sub-Divisions Management
 app.get('/api/subdivisions', (_req: Request, res: Response) => {
   const db = DatabaseStore.get();
@@ -354,6 +585,60 @@ app.post('/api/subdivisions', (req: Request, res: Response) => {
     const msg = err instanceof Error ? err.message : 'Error';
     return res.status(500).json({ success: false, error: msg });
   }
+});
+
+// Update / Rename Sub-Division safely
+app.put('/api/subdivisions/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = DatabaseStore.get();
+  const sub = db.subdivisions.find(s => s.id === id);
+  if (!sub) return res.status(404).json({ success: false, error: 'Sub-Division not found' });
+
+  const old = { ...sub };
+  if (req.body.name) {
+    const newName = String(req.body.name).trim().toUpperCase();
+    // Check duplicate name within the same division
+    const dup = db.subdivisions.find(s => s.divisionId === sub.divisionId && s.id !== id && s.name.toLowerCase() === newName.toLowerCase());
+    if (dup) {
+      return res.status(409).json({ success: false, error: `Another Sub-Division named "${newName}" already exists in this Division.` });
+    }
+    sub.name = newName;
+  }
+  if (req.body.code) sub.code = String(req.body.code).trim().toUpperCase();
+  if (req.body.status) sub.status = req.body.status;
+  sub.updatedAt = new Date().toISOString();
+
+  DatabaseStore.saveToDisk();
+  DatabaseStore.logAudit(req.body.user || 'Admin', 'UPDATE_SUBDIVISION', 'SubDivision', sub.id, old, sub);
+  broadcastSync(sub, 'SUBDIVISION_UPDATED');
+
+  return res.json({ success: true, subdivision: sub });
+});
+
+// Safe Protected Deletion of Sub-Division
+app.delete('/api/subdivisions/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = DatabaseStore.get();
+  const index = db.subdivisions.findIndex(s => s.id === id);
+  if (index === -1) return res.status(404).json({ success: false, error: 'Sub-Division not found' });
+
+  // Safety check: protect folders that contain linked locations or daily entries
+  const linkedLocations = db.locations.filter(l => l.subdivisionId === id);
+  const linkedEntries = db.dailyEntries.filter(e => e.subdivisionId === id);
+
+  if (linkedLocations.length > 0 || linkedEntries.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: `Cannot delete Sub-Division: contains ${linkedLocations.length} locations and ${linkedEntries.length} historical work entries. Archive or reassign records first to prevent data loss.`
+    });
+  }
+
+  const deleted = db.subdivisions.splice(index, 1)[0];
+  DatabaseStore.saveToDisk();
+  DatabaseStore.logAudit(req.body.user || 'Admin', 'DELETE_SUBDIVISION', 'SubDivision', id, deleted, null);
+  broadcastSync({ id }, 'SUBDIVISION_DELETED');
+
+  return res.json({ success: true, message: `Sub-Division "${deleted.name}" removed safely.`, deleted });
 });
 
 // 4. Locations Management
@@ -631,7 +916,7 @@ app.post('/api/entries', async (req: Request, res: Response) => {
       transformerId,
       entryDate,
       enteredBy: String(enteredBy || 'Field Engineer').trim(),
-      locationType: locationType === 'Maintenance' ? 'Maintenance' : 'In house',
+      locationType: 'Maintenance',
       remarks: remarks ? String(remarks).trim() : undefined,
       version: 1,
       syncStatus: 'Synced',
@@ -720,8 +1005,8 @@ app.put('/api/entries/:id', (req: Request, res: Response) => {
   return res.json({ success: true, entry });
 });
 
-// Delete a Daily Entry (Soft Delete / Historical audit protection)
-app.delete('/api/entries/:id', (req: Request, res: Response) => {
+// Delete a Daily Entry with Stock Restoration & Audit Protection
+const handleDeleteDailyEntry = (req: Request, res: Response) => {
   const { id } = req.params;
   const db = DatabaseStore.get();
   const index = db.dailyEntries.findIndex(e => e.id === id);
@@ -731,12 +1016,47 @@ app.delete('/api/entries/:id', (req: Request, res: Response) => {
   }
 
   const deleted = db.dailyEntries.splice(index, 1)[0];
+
+  // Restore material stocks for each item in the deleted entry
+  if (deleted && Array.isArray(deleted.items)) {
+    for (const it of deleted.items) {
+      const mat = db.materials.find(m => m.id === it.materialId || m.name.toLowerCase() === String(it.materialName).toLowerCase());
+      if (mat) {
+        mat.currentStock += Number(it.quantity) || 0;
+        mat.updatedAt = new Date().toISOString();
+      }
+      // Record Stock RETURN transaction
+      db.stockTransactions.push({
+        id: `TX-RETURN-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        materialId: it.materialId,
+        materialName: it.materialName,
+        variantName: it.variantName,
+        type: 'RETURN',
+        quantity: Number(it.quantity) || 0,
+        unit: it.unit || 'Nos.',
+        referenceType: 'daily_entry',
+        referenceId: id,
+        divisionId: deleted.divisionId,
+        subdivisionId: deleted.subdivisionId,
+        locationId: deleted.locationId,
+        date: new Date().toISOString().slice(0, 10),
+        enteredBy: req.body.user || 'Admin',
+        notes: `Stock returned on entry deletion ${id}`,
+        createdAt: new Date().toISOString()
+      });
+    }
+  }
+
   DatabaseStore.saveToDisk();
   DatabaseStore.logAudit(req.body.user || 'Admin', 'DELETE_DAILY_ENTRY', 'DailyEntry', id, deleted, null);
   broadcastSync({ id }, 'ENTRY_DELETED');
+  broadcastSync({ id }, 'submission_deleted');
 
-  return res.json({ success: true, message: 'Daily Entry removed.', deleted });
-});
+  return res.json({ success: true, message: 'Daily Entry removed and material stock restored.', deleted });
+};
+
+app.delete('/api/entries/:id', handleDeleteDailyEntry);
+app.delete('/api/inventory/entries/:id', handleDeleteDailyEntry);
 
 // 8. Transformer Volt-Amp Readings (Dedicated Workflow per Phase 4)
 app.get('/api/readings', (_req: Request, res: Response) => {
@@ -969,6 +1289,21 @@ app.get('/api/audit-logs', (_req: Request, res: Response) => {
   res.json({ success: true, count: db.auditLogs.length, logs: db.auditLogs });
 });
 
+// 13. Global Google Sheets / Drive Cloud Sync Config
+let globalScriptUrl = process.env.GOOGLE_SHEETS_SCRIPT_URL || process.env.VITE_GOOGLE_SHEETS_SCRIPT_URL || '';
+
+app.get('/api/sync/global-config', (_req: Request, res: Response) => {
+  res.json({ success: true, scriptUrl: globalScriptUrl });
+});
+
+app.post('/api/sync/global-config', (req: Request, res: Response) => {
+  const { scriptUrl } = req.body;
+  if (typeof scriptUrl === 'string') {
+    globalScriptUrl = scriptUrl.trim();
+  }
+  res.json({ success: true, message: 'Global Google Sheets Script URL updated.', scriptUrl: globalScriptUrl });
+});
+
 // -------------------------------------------------------------
 // UI Compatibility Endpoints (/api/inventory/*)
 // -------------------------------------------------------------
@@ -1003,7 +1338,7 @@ app.post('/api/inventory/entries', async (req: Request, res: Response) => {
       db.locations.push(targetLoc);
     }
 
-    const cleanType: 'In house' | 'Maintenance' = locationType === 'Maintenance' ? 'Maintenance' : 'In house';
+    const cleanType: 'Maintenance' = 'Maintenance';
     const entryDate = new Date().toISOString().slice(0, 10);
     const newEntryId = id || `INV-${entryDate.replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
 
@@ -1099,7 +1434,7 @@ app.post('/api/inventory/entries', async (req: Request, res: Response) => {
     broadcastSync(dailyEntry, 'ENTRY_CREATED');
 
     const cleanFolder = sanitizeFolderName(targetLoc.name);
-    const targetFile = cleanType === 'In house' ? `${cleanFolder}_In_House.xlsx` : `${cleanFolder}_Maintenance.xlsx`;
+    const targetFile = `${cleanFolder}_Maintenance.xlsx`;
 
     return res.status(201).json({
       success: true,
@@ -1138,13 +1473,6 @@ app.get('/api/inventory/locations-tree', (_req: Request, res: Response) => {
       subdivisionName: sub ? sub.name : 'DOLVAN',
       lastUpdated: locEntries[0]?.createdAt || loc.updatedAt,
       files: [
-        {
-          fileName: `${cleanFolder}_Inventory_Usage.xlsx`,
-          type: 'In house' as const,
-          submissionsCount: inHouseEntries.length,
-          itemsCount: inHouseEntries.reduce((sum, e) => sum + e.items.length, 0),
-          lastUpdated: inHouseEntries[0]?.createdAt || loc.updatedAt
-        },
         {
           fileName: `${cleanFolder}_Maintenance_Log.xlsx`,
           type: 'Maintenance' as const,
@@ -1254,6 +1582,22 @@ app.get('/api/inventory/export/location-file', (req: Request, res: Response) => 
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       return res.send(buffer);
     }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Export failed';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// Download Canonical Single Primary Excel Workbook for a Sub-Division (e.g. DOLVAN.xlsx)
+app.get('/api/inventory/export/subdivision-file', (req: Request, res: Response) => {
+  try {
+    const subdivisionId = String(req.query.subdivisionId || req.query.id || 'sub-dolvan').trim();
+    const result = generateSubdivisionUsageWorkbook(subdivisionId);
+
+    const buffer = XLSX.write(result.wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+    return res.send(buffer);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Export failed';
     return res.status(500).json({ success: false, error: msg });

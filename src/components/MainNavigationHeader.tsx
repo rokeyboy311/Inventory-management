@@ -53,8 +53,14 @@ export const MainNavigationHeader: React.FC<MainNavigationHeaderProps> = ({
                 <h1 className="text-sm sm:text-base font-bold text-white tracking-tight">
                   Division Inventory System
                 </h1>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-mono">
-                  VYARA ➔ DOLVAN
+                <span 
+                  onClick={() => onTabChange('location')}
+                  title="Folder Hierarchy: VYARA Division ➔ DOLVAN Sub-Division (Click to view folders)"
+                  className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 font-mono flex items-center space-x-1 cursor-pointer transition"
+                >
+                  <span>📁 VYARA</span>
+                  <span className="text-emerald-300 font-bold">➔</span>
+                  <span>📂 DOLVAN</span>
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 hidden lg:block">

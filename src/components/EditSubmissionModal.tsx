@@ -145,14 +145,9 @@ export const EditSubmissionModal: React.FC<EditSubmissionModalProps> = ({
 
             <div className="space-y-1">
               <label className="font-semibold text-slate-300">Location Type</label>
-              <select
-                value={locationType}
-                onChange={(e) => setLocationType(e.target.value as 'In house' | 'Maintenance')}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
-              >
-                <option value="In house">1st: In house</option>
-                <option value="Maintenance">2nd: Maintenance</option>
-              </select>
+              <div className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-cyan-400 font-semibold flex items-center space-x-2">
+                <span>Maintenance</span>
+              </div>
             </div>
 
             <div className="space-y-1">

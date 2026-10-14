@@ -150,24 +150,24 @@ export const ReadingsView: React.FC<ReadingsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn font-terminal">
       
       {/* Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-[#1c1c1f] border border-[rgba(226,226,231,0.12)] p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center space-x-3.5">
-          <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+          <div className="p-2.5 bg-[#111113] border border-[rgba(226,226,231,0.15)] text-[#00ffaa]">
             <Activity className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+              <h2 className="font-display text-xl uppercase tracking-wide text-white">
                 Transformer Volt-Amp Reading Register
               </h2>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-300 border border-purple-700/40 font-mono">
-                Sheet 2 Format
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 border border-[#00ffaa] text-[#00ffaa] bg-[#111113]">
+                SHEET 2 REGISTRY
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[rgba(226,226,231,0.4)] mt-0.5 font-mono">
               Dedicated operational records for 3-Phase AC Voltage (RN, YN, BN) and Current (R, Y, B, N). Never overwrites past readings.
             </p>
           </div>

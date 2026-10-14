@@ -218,17 +218,12 @@ export const ViewSubmissionsModal: React.FC<ViewSubmissionsModalProps> = ({
             </select>
           </div>
 
-          {/* Location Type Filter */}
+          {/* Record Type - Maintenance */}
           <div className="relative">
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value as 'ALL' | 'In house' | 'Maintenance')}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
-            >
-              <option value="ALL">All Types (In house &amp; Maintenance)</option>
-              <option value="In house">1st: In house Only</option>
-              <option value="Maintenance">2nd: Maintenance Only</option>
-            </select>
+            <div className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-cyan-400 text-sm font-semibold flex items-center justify-between">
+              <span>TC Maintenance Records</span>
+              <span className="text-[10px] bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800 text-cyan-300">Active</span>
+            </div>
           </div>
 
           {/* Date Filter */}
