@@ -449,12 +449,15 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
         {/* Performa Footer / Signature Section for Official Printouts */}
         <div className="grid grid-cols-2 gap-8 pt-8 mt-4 border-t border-slate-400 text-xs text-slate-600">
           <div>
-            <div className="font-semibold text-slate-800 mb-1">Field Engineer / Technician Signature</div>
-            <div className="border-b border-dashed border-slate-400 h-8"></div>
+            <div className="flex items-center space-x-2 mb-1">
+              <span className="font-semibold text-slate-800">Field Engineer / Technician Signature:</span>
+              <span className="font-serif italic font-bold text-blue-900 text-sm">Dk</span>
+            </div>
+            <div className="border-b border-dashed border-slate-400 h-6"></div>
           </div>
           <div className="text-right">
             <div className="font-semibold text-slate-800 mb-1">Authorized Discom Officer Signature</div>
-            <div className="border-b border-dashed border-slate-400 h-8"></div>
+            <div className="border-b border-dashed border-slate-400 h-6"></div>
           </div>
         </div>
       </div>

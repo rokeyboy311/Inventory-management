@@ -59,6 +59,9 @@ import { ImportSummaryModal } from './components/ImportSummaryModal';
 import { DraftRecoveryBanner } from './components/DraftRecoveryBanner';
 import { CreateLocationModal } from './components/CreateLocationModal';
 import { ExcelDataTable } from './components/ExcelDataTable';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import { PWAInstallModal } from './components/PWAInstallModal';
+import { EngineerProfileModal } from './components/EngineerProfileModal';
 
 export function App() {
   // Direct file input ref for top action bar upload
@@ -74,6 +77,9 @@ export function App() {
 
   // Create Location Excel Modal
   const [isCreateLocationModalOpen, setIsCreateLocationModalOpen] = useState(false);
+  // Engineer Profile Modal & PWA Install Modal
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   // Active performa currently in the A4 editor
   const [currentPerforma, setCurrentPerforma] = useState<PerformaRecord>(() => 
@@ -712,8 +718,12 @@ export function App() {
             </div>
           </div>
 
-          {/* Right Controls: Create Location Excel & A4 Document Badge */}
-          <div className="flex items-center space-x-3">
+          {/* Right Controls: PWA Install, Create Location, Profile Avatar, A4 Document Badge */}
+          <div className="flex items-center space-x-2.5 sm:space-x-3">
+            {/* PWA Install Button */}
+            <PWAInstallButton />
+
+            {/* Create Location Excel */}
             <button
               type="button"
               onClick={() => setIsCreateLocationModalOpen(true)}
@@ -723,7 +733,35 @@ export function App() {
               <span>+ New Location Excel</span>
             </button>
 
-            <div className="flex items-center space-x-2 bg-blue-950/60 border border-blue-700/60 rounded-xl px-3 py-1.5 text-xs text-blue-100">
+            {/* Engineer Profile Avatar ("Dk" from reference photo) */}
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="flex items-center space-x-2 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/60 rounded-xl px-2.5 py-1 text-xs text-blue-100 transition-all cursor-pointer group shadow-inner"
+              title="Field Engineer Profile (Dk)"
+            >
+              <div className="w-7 h-7 rounded-lg bg-slate-900 border border-amber-400 flex items-center justify-center overflow-hidden shadow-xs relative">
+                {localStorage.getItem('performa_engineer_photo_v1') ? (
+                  <img 
+                    src={localStorage.getItem('performa_engineer_photo_v1')!} 
+                    alt="Dk" 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-amber-400 font-serif font-black italic text-sm">Dk</span>
+                )}
+              </div>
+              <div className="text-left hidden md:block">
+                <div className="font-bold text-[11px] leading-tight text-white flex items-center space-x-1">
+                  <span>{localStorage.getItem('performa_engineer_name_v1') || 'Dk'}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                </div>
+                <div className="text-[9px] text-blue-300 font-mono">Lead Engineer</div>
+              </div>
+            </button>
+
+            {/* A4 Document Badge */}
+            <div className="hidden lg:flex items-center space-x-2 bg-blue-950/60 border border-blue-700/60 rounded-xl px-3 py-1.5 text-xs text-blue-100">
               <FileText className="w-4 h-4 text-blue-300" />
               <div>
                 <div className="font-bold text-[11px] leading-tight">A4 Document</div>
@@ -1090,6 +1128,21 @@ export function App() {
         onImportNewOnly={handleImportNewOnly}
         onUpdateExistingAndAddNew={handleUpdateExistingAndAddNew}
         isReimport={uploadedFileName?.includes('Sample') || false}
+      />
+
+      {/* Engineer Profile Modal (Dk Avatar & Info) */}
+      <EngineerProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        onOpenInstallModal={() => setIsInstallModalOpen(true)}
+        totalPerformasCount={activePerformas.length}
+        currentLocationName={activeWorkbook?.locationName || 'Ahmedabad'}
+      />
+
+      {/* Dedicated PWA Install Modal (Android, iPhone, Desktop) */}
+      <PWAInstallModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
       />
     </div>
   );
