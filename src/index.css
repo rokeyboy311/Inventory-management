@@ -1,48 +1,68 @@
 @import "tailwindcss";
 
 @layer base {
-  :root {
-    --bg: #111113;
-    --ink: #e2e2e7;
-    --accent: #00ffaa;
-    --accent-cyan: #00ccff;
-    --ink-faint: rgba(226, 226, 231, 0.12);
-    --ink-muted: rgba(226, 226, 231, 0.4);
-    --surface: #1c1c1f;
-    --surface-hover: #242429;
-  }
-
   body {
-    background-color: #111113;
-    color: #e2e2e7;
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background-color: #edf2f7;
+    color: #1e293b;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 }
 
-.font-display {
-  font-family: 'Oswald', sans-serif;
+/* Print Specific Rules for True A4 Layout */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Hide UI chrome during print */
+  header, 
+  nav, 
+  aside, 
+  footer, 
+  .print\\:hidden,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Expand document to fill page */
+  #printable-a4-document {
+    border: 1px solid #000000 !important;
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  input {
+    border: none !important;
+    background: transparent !important;
+  }
 }
 
-.font-terminal {
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* Custom terminal scrollbars */
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #111113;
+  background: #e2e8f0;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(226, 226, 231, 0.15);
-  border-radius: 2px;
+  background: #94a3b8;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #00ffaa;
+  background: #64748b;
 }
