@@ -62,6 +62,7 @@ import { ExcelDataTable } from './components/ExcelDataTable';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { PWAInstallModal } from './components/PWAInstallModal';
 import { EngineerProfileModal } from './components/EngineerProfileModal';
+import { ExportReferenceModal } from './components/ExportReferenceModal';
 
 export function App() {
   // Direct file input ref for top action bar upload
@@ -72,14 +73,16 @@ export function App() {
   const [activeLocationId, setActiveLocationId] = useState<string>('ahmedabad');
   const [activeSheetName, setActiveSheetName] = useState<string>('Performas');
 
-  // Main view tab: 'form' (A4 document) vs 'table' (Excel sheet data table)
-  const [mainViewTab, setMainViewTab] = useState<'form' | 'table'>('form');
+  // Main view tab: 'form' (A4 document) vs 'table' (Excel sheet data table) vs 'files' (Mobile sidebar)
+  const [mainViewTab, setMainViewTab] = useState<'form' | 'table' | 'files'>('form');
 
   // Create Location Excel Modal
   const [isCreateLocationModalOpen, setIsCreateLocationModalOpen] = useState(false);
   // Engineer Profile Modal & PWA Install Modal
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  // Export Reference Modal (DOLVAN INVENTERY.xlsx Sheet1)
+  const [isExportReferenceModalOpen, setIsExportReferenceModalOpen] = useState(false);
 
   // Active performa currently in the A4 editor
   const [currentPerforma, setCurrentPerforma] = useState<PerformaRecord>(() => 
@@ -594,34 +597,16 @@ export function App() {
     showNotification(`Merged ${importSummary.parsedPerformas.length} records! Next starts at Sr No. ${updatedList.length + 1}`);
   };
 
-  // Export Excel workbook (continuous storage)
+  // Export Excel workbook (Using DOLVAN INVENTERY.xlsx Sheet1 Reference Master Format)
   const handleExportExcel = () => {
     if (!activeWorkbook) return;
 
-    // If active sheet has saved records, export them
-    if (activePerformas.length > 0) {
-      exportPerformasToExcel(
-        activePerformas,
-        activeWorkbook.workbookName,
-        activeSheetName
-      );
-      showNotification(`Exported ${activePerformas.length} records to "${activeWorkbook.workbookName}"!`);
-      return;
-    }
-
-    // If active sheet has 0 records saved, but user is currently filling a performa, save and export it
-    if (currentPerforma && currentPerforma.id) {
+    // If active sheet has 0 records saved, but user is currently filling a performa, save it first
+    if (activePerformas.length === 0 && currentPerforma && currentPerforma.id) {
       saveCurrentPerformaInternal(currentPerforma);
-      exportPerformasToExcel(
-        [currentPerforma],
-        activeWorkbook.workbookName,
-        activeSheetName
-      );
-      showNotification(`Saved and exported Performa ${currentPerforma.id} to "${activeWorkbook.workbookName}"!`);
-      return;
     }
 
-    alert('Please enter or save at least one performa before exporting.');
+    setIsExportReferenceModalOpen(true);
   };
 
   // Download Sample Excel
@@ -697,29 +682,29 @@ export function App() {
 
       {/* Top Application Header */}
       <header className="bg-[#1e3a8a] text-white shadow-md print:hidden">
-        <div className="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
           {/* Logo & Title */}
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/30 border border-blue-400/40 text-blue-200 flex items-center justify-center font-bold shadow-inner">
-              <Zap className="w-5 h-5 text-amber-300" />
+          <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-500/30 border border-blue-400/40 text-blue-200 flex items-center justify-center font-bold shadow-inner flex-shrink-0">
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-2">
-                <h1 className="font-extrabold text-base sm:text-lg tracking-tight leading-tight">
+                <h1 className="font-extrabold text-sm sm:text-base md:text-lg tracking-tight leading-tight truncate">
                   Transformer Maintenance Performa
                 </h1>
-                <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-700/80 text-blue-200 uppercase tracking-widest border border-blue-600">
+                <span className="hidden md:inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-700/80 text-blue-200 uppercase tracking-widest border border-blue-600">
                   Continuous Entry
                 </span>
               </div>
-              <p className="text-[11px] text-blue-200/80">
+              <p className="text-[10px] sm:text-[11px] text-blue-200/80 hidden xs:block truncate">
                 Excel Import • Edit • Preview • Print / PDF • Export Excel
               </p>
             </div>
           </div>
 
           {/* Right Controls: PWA Install, Create Location, Profile Avatar, A4 Document Badge */}
-          <div className="flex items-center space-x-2.5 sm:space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
             {/* PWA Install Button */}
             <PWAInstallButton />
 
@@ -727,20 +712,21 @@ export function App() {
             <button
               type="button"
               onClick={() => setIsCreateLocationModalOpen(true)}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow transition-all cursor-pointer"
+              className="flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow transition-all cursor-pointer"
             >
-              <FolderPlus className="w-4 h-4" />
-              <span>+ New Location Excel</span>
+              <FolderPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">+ New Location Excel</span>
+              <span className="sm:hidden">+ Location</span>
             </button>
 
             {/* Engineer Profile Avatar ("Dk" from reference photo) */}
             <button
               type="button"
               onClick={() => setIsProfileModalOpen(true)}
-              className="flex items-center space-x-2 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/60 rounded-xl px-2.5 py-1 text-xs text-blue-100 transition-all cursor-pointer group shadow-inner"
+              className="flex items-center space-x-1.5 sm:space-x-2 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/60 rounded-xl px-2 sm:px-2.5 py-1 text-xs text-blue-100 transition-all cursor-pointer group shadow-inner"
               title="Field Engineer Profile (Dk)"
             >
-              <div className="w-7 h-7 rounded-lg bg-slate-900 border border-amber-400 flex items-center justify-center overflow-hidden shadow-xs relative">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-slate-900 border border-amber-400 flex items-center justify-center overflow-hidden shadow-xs relative">
                 {localStorage.getItem('performa_engineer_photo_v1') ? (
                   <img 
                     src={localStorage.getItem('performa_engineer_photo_v1')!} 
@@ -748,7 +734,7 @@ export function App() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span className="text-amber-400 font-serif font-black italic text-sm">Dk</span>
+                  <span className="text-amber-400 font-serif font-black italic text-xs sm:text-sm">Dk</span>
                 )}
               </div>
               <div className="text-left hidden md:block">
@@ -761,7 +747,7 @@ export function App() {
             </button>
 
             {/* A4 Document Badge */}
-            <div className="hidden lg:flex items-center space-x-2 bg-blue-950/60 border border-blue-700/60 rounded-xl px-3 py-1.5 text-xs text-blue-100">
+            <div className="hidden xl:flex items-center space-x-2 bg-blue-950/60 border border-blue-700/60 rounded-xl px-3 py-1.5 text-xs text-blue-100">
               <FileText className="w-4 h-4 text-blue-300" />
               <div>
                 <div className="font-bold text-[11px] leading-tight">A4 Document</div>
@@ -774,43 +760,88 @@ export function App() {
 
       {/* Action Toolbar */}
       <nav className="bg-white border-b border-slate-200 shadow-xs sticky top-0 z-30 print:hidden">
-        <div className="max-w-[1600px] mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
-          {/* Left Buttons */}
-          <div className="flex items-center space-x-2">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+          {/* Tier 1: View Tab Switchers */}
+          <div className="flex items-center space-x-2 w-full md:w-auto">
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => setMainViewTab('form')}
+                className={`flex-1 md:flex-initial flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  mainViewTab === 'form'
+                    ? 'bg-white text-blue-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Performa Form</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMainViewTab('table')}
+                className={`flex-1 md:flex-initial flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  mainViewTab === 'table'
+                    ? 'bg-white text-emerald-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Table className="w-3.5 h-3.5" />
+                <span>Records ({activePerformas.length})</span>
+              </button>
+
+              {/* Mobile files/import tab */}
+              <button
+                type="button"
+                onClick={() => setMainViewTab('files')}
+                className={`flex-1 md:flex-initial lg:hidden flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  mainViewTab === 'files'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Files</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tier 2: Scrollable / Wrapped Action Buttons */}
+          <div className="flex items-center space-x-1.5 sm:space-x-2 overflow-x-auto no-scrollbar py-0.5">
             <button
               type="button"
               onClick={() => toolbarFileInputRef.current?.click()}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               <UploadCloud className="w-3.5 h-3.5" />
-              <span>Upload Excel</span>
+              <span>Upload</span>
             </button>
 
             <button
               type="button"
               onClick={handleStartNewPerforma}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+              className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 text-blue-600" />
-              <span>New Performa</span>
+              <span>New</span>
             </button>
 
             <button
               type="button"
               onClick={handleSaveAndClose}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+              className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
             >
               <Save className="w-3.5 h-3.5 text-slate-500" />
-              <span>Save Draft</span>
+              <span>Save</span>
             </button>
 
-            <div className="h-5 w-px bg-slate-200 mx-1"></div>
+            <div className="h-4 w-px bg-slate-200 mx-0.5 flex-shrink-0"></div>
 
             <button
               type="button"
               disabled={historyIndex <= 0}
               onClick={handleUndo}
-              className={`p-1.5 rounded-lg border text-xs transition-colors ${
+              className={`p-1.5 rounded-lg border text-xs transition-colors flex-shrink-0 ${
                 historyIndex > 0
                   ? 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer'
                   : 'border-slate-200 text-slate-300 cursor-not-allowed'
@@ -824,7 +855,7 @@ export function App() {
               type="button"
               disabled={historyIndex >= history.length - 1}
               onClick={handleRedo}
-              className={`p-1.5 rounded-lg border text-xs transition-colors ${
+              className={`p-1.5 rounded-lg border text-xs transition-colors flex-shrink-0 ${
                 historyIndex < history.length - 1
                   ? 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer'
                   : 'border-slate-200 text-slate-300 cursor-not-allowed'
@@ -834,47 +865,15 @@ export function App() {
               <Redo2 className="w-3.5 h-3.5" />
             </button>
 
-            <div className="h-5 w-px bg-slate-200 mx-1"></div>
+            <div className="h-4 w-px bg-slate-200 mx-0.5 flex-shrink-0"></div>
 
-            {/* View Tab Switch: Performa Form vs Excel Records Table */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setMainViewTab('form')}
-                className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                  mainViewTab === 'form'
-                    ? 'bg-white text-blue-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Performa Form</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setMainViewTab('table')}
-                className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                  mainViewTab === 'table'
-                    ? 'bg-white text-emerald-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Table className="w-3.5 h-3.5" />
-                <span>Excel Records ({activePerformas.length})</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Right Buttons: Preview, Print / PDF, Export Excel */}
-          <div className="flex items-center space-x-2">
             <button
               type="button"
               onClick={() => {
                 setMainViewTab('form');
                 setViewMode(viewMode === 'preview' ? 'edit' : 'preview');
               }}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+              className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                 viewMode === 'preview' && mainViewTab === 'form'
                   ? 'bg-blue-600 text-white border-blue-600'
                   : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
@@ -887,36 +886,36 @@ export function App() {
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5 text-slate-600" />
-              <span>Print / PDF</span>
+              <span>Print</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportExcel}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              className="flex-shrink-0 flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Export Excel</span>
+              <span>Export</span>
             </button>
           </div>
         </div>
       </nav>
 
       {/* Sub-Header: Location & Sheet Selector + Continuous Sequence Navigator */}
-      <div className="bg-slate-100 border-b border-slate-200 px-4 py-2 print:hidden">
-        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="bg-slate-100 border-b border-slate-200 px-3 sm:px-4 py-2 print:hidden">
+        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
           {/* Location & Workbook Selection */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="flex items-center space-x-1 font-semibold text-slate-700">
-              <MapPin className="w-3.5 h-3.5 text-blue-600" />
-              <span>Location File:</span>
+          <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto">
+            <div className="flex-1 sm:flex-initial flex items-center space-x-1 font-semibold text-slate-700 min-w-0">
+              <MapPin className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+              <span className="hidden md:inline">Location:</span>
               <select
                 value={activeLocationId}
                 onChange={(e) => handleLocationChange(e.target.value)}
-                className="bg-white border border-slate-300 rounded px-2 py-1 font-bold text-slate-800 text-xs outline-none cursor-pointer"
+                className="w-full sm:w-auto bg-white border border-slate-300 rounded px-2 py-1 font-bold text-slate-800 text-xs outline-none cursor-pointer truncate"
               >
                 {workbooks.map(w => (
                   <option key={w.locationId} value={w.locationId}>
@@ -926,13 +925,13 @@ export function App() {
               </select>
             </div>
 
-            <div className="flex items-center space-x-1 font-semibold text-slate-700">
-              <Layers className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Sheet:</span>
+            <div className="flex-1 sm:flex-initial flex items-center space-x-1 font-semibold text-slate-700 min-w-0">
+              <Layers className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
+              <span className="hidden md:inline">Sheet:</span>
               <select
                 value={activeSheetName}
                 onChange={(e) => handleSheetChange(e.target.value)}
-                className="bg-white border border-slate-300 rounded px-2 py-1 font-bold text-indigo-800 text-xs outline-none cursor-pointer"
+                className="w-full sm:w-auto bg-white border border-slate-300 rounded px-2 py-1 font-bold text-indigo-800 text-xs outline-none cursor-pointer truncate"
               >
                 {activeWorkbook && Object.keys(activeWorkbook.sheets).map(sheet => (
                   <option key={sheet} value={sheet}>
@@ -944,55 +943,59 @@ export function App() {
           </div>
 
           {/* Sequential Navigator: [< Prev] [Next >] and [+ Add New Performa] */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-between sm:justify-end space-x-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-200">
             <div className="flex items-center space-x-1 text-slate-500 font-mono text-[11px]">
-              <span>Sequence:</span>
+              <span className="hidden xs:inline">Sequence:</span>
               <span className="font-bold text-slate-800">
                 {currentIndex >= 0 
-                  ? `Sr No. ${currentIndex + 1} of ${activePerformas.length}` 
-                  : `Next: Sr No. ${activePerformas.length + 1}`}
+                  ? `Sr ${currentIndex + 1} of ${activePerformas.length}` 
+                  : `Next: Sr ${activePerformas.length + 1}`}
               </span>
             </div>
 
-            <button
-              type="button"
-              disabled={!canGoPrev}
-              onClick={handlePrevPerforma}
-              className={`p-1 rounded border text-xs ${
-                canGoPrev 
-                  ? 'bg-white text-slate-700 hover:bg-slate-50 border-slate-300 cursor-pointer' 
-                  : 'text-slate-300 border-slate-200 cursor-not-allowed'
-              }`}
-              title="Previous Performa"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center space-x-1.5">
+              <button
+                type="button"
+                disabled={!canGoPrev}
+                onClick={handlePrevPerforma}
+                className={`p-1.5 sm:p-1 rounded border text-xs ${
+                  canGoPrev 
+                    ? 'bg-white text-slate-700 hover:bg-slate-50 border-slate-300 cursor-pointer' 
+                    : 'text-slate-300 border-slate-200 cursor-not-allowed'
+                }`}
+                title="Previous Performa"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
 
-            <button
-              type="button"
-              onClick={handleNextPerforma}
-              className="p-1 rounded border bg-white text-slate-700 hover:bg-slate-50 border-slate-300 text-xs cursor-pointer"
-              title={currentIndex < activePerformas.length - 1 ? 'Next Performa' : 'Add Next Performa'}
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+              <button
+                type="button"
+                onClick={handleNextPerforma}
+                className="p-1.5 sm:p-1 rounded border bg-white text-slate-700 hover:bg-slate-50 border-slate-300 text-xs cursor-pointer"
+                title={currentIndex < activePerformas.length - 1 ? 'Next Performa' : 'Add Next Performa'}
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
 
-            <button
-              type="button"
-              onClick={handleStartNewPerforma}
-              className="flex items-center space-x-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus className="w-3 h-3" />
-              <span>+ Add Sr No. {activePerformas.length + 1}</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleStartNewPerforma}
+                className="flex items-center space-x-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+                <span>+ Add Sr {activePerformas.length + 1}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Workspace Layout */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto p-2.5 sm:p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
         {/* Left Column: Excel Import & Tools Sidebar */}
-        <aside className="lg:col-span-4 xl:col-span-3 print:hidden">
+        <aside className={`lg:col-span-4 xl:col-span-3 print:hidden ${
+          mainViewTab === 'files' ? 'block w-full' : 'hidden lg:block'
+        }`}>
           <ExcelImportSidebar
             onFileUpload={handleFileUpload}
             uploadedFileName={uploadedFileName}
@@ -1008,20 +1011,31 @@ export function App() {
             isSheetCompatible={activeSheet?.isCompatible ?? true}
             totalPerformasCount={activePerformas.length}
             onViewTable={() => setMainViewTab('table')}
-            onOpenNewPerforma={handleStartNewPerforma}
+            onOpenNewPerforma={() => {
+              handleStartNewPerforma();
+              setMainViewTab('form');
+            }}
           />
         </aside>
 
         {/* Center / Right Column: Form OR Excel Data Table */}
-        <section className="lg:col-span-8 xl:col-span-9 flex flex-col items-center w-full">
+        <section className={`lg:col-span-8 xl:col-span-9 flex flex-col items-center w-full ${
+          mainViewTab === 'files' ? 'hidden lg:flex' : 'flex'
+        }`}>
           {mainViewTab === 'table' ? (
             <ExcelDataTable
               workbookName={activeWorkbook?.workbookName || 'Ahmedabad.xlsx'}
               sheetName={activeSheetName}
               performas={activePerformas}
-              onEditPerforma={handleSelectPerforma}
+              onEditPerforma={(id) => {
+                handleSelectPerforma(id);
+                setMainViewTab('form');
+              }}
               onDeletePerforma={handleDeletePerforma}
-              onAddNewPerforma={handleStartNewPerforma}
+              onAddNewPerforma={() => {
+                handleStartNewPerforma();
+                setMainViewTab('form');
+              }}
               onExportExcel={handleExportExcel}
             />
           ) : (
@@ -1143,6 +1157,18 @@ export function App() {
       <PWAInstallModal
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}
+      />
+
+      {/* DOLVAN INVENTERY.xlsx Sheet1 Reference Master Export Modal */}
+      <ExportReferenceModal
+        isOpen={isExportReferenceModalOpen}
+        onClose={() => setIsExportReferenceModalOpen(false)}
+        performas={activePerformas.length > 0 ? activePerformas : (currentPerforma?.id ? [currentPerforma] : [])}
+        locationName={activeWorkbook?.locationName || 'Ahmedabad'}
+        workbookName={activeWorkbook?.workbookName || 'Ahmedabad.xlsx'}
+        onExportSuccess={(fileName) => {
+          showNotification(`Exported to "${fileName}" matching DOLVAN INVENTERY Sheet1!`);
+        }}
       />
     </div>
   );

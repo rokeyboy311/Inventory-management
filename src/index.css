@@ -26,7 +26,6 @@
   nav, 
   aside, 
   footer, 
-  .print\\:hidden,
   button,
   .no-print {
     display: none !important;

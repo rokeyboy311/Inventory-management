@@ -1,6 +1,6 @@
 import React from 'react';
 import { PerformaRecord, MaintenanceItemRow } from '../types/performa';
-import { Check, X, Calendar, MapPin, Hash, Zap, AlertCircle, Save, PlusCircle, Trash2, ArrowLeft } from 'lucide-react';
+import { Check, X, Calendar, MapPin, Hash, Zap, AlertCircle, Save, PlusCircle, Trash2, ArrowLeft, ArrowLeftRight } from 'lucide-react';
 
 interface A4PerformaDocumentProps {
   performa: PerformaRecord;
@@ -92,20 +92,25 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
       {/* A4 Document Container */}
       <div 
         id="printable-a4-document"
-        className="w-full max-w-[850px] bg-white text-slate-900 border-2 border-slate-700 shadow-2xl rounded-sm p-6 sm:p-8 print:p-0 print:border-none print:shadow-none print:max-w-none print:w-full transition-all"
-        style={{ minHeight: '1120px' }}
+        className="w-full max-w-[850px] bg-white text-slate-900 border sm:border-2 border-slate-700 shadow-md sm:shadow-2xl rounded-xl sm:rounded-sm p-3.5 sm:p-6 md:p-8 print:p-0 print:border-none print:shadow-none print:max-w-none print:w-full transition-all"
       >
         {/* Document Header Title */}
-        <div className="text-center pb-4 border-b-2 border-slate-800 mb-4">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-serif uppercase text-slate-900">
+        <div className="text-center pb-3 sm:pb-4 border-b-2 border-slate-800 mb-3 sm:mb-4">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight font-serif uppercase text-slate-900 leading-tight">
             Transformer Maintenance / Repair Performa
           </h1>
-          <div className="flex items-center justify-center space-x-4 mt-1 text-xs text-slate-600 uppercase tracking-widest font-mono">
-            <span>Performa ID: <strong className="text-blue-700 font-bold">{performa.id}</strong></span>
-            <span>•</span>
-            <span>Standard Format A4</span>
-            <span>•</span>
-            <span>{isExisting ? 'Existing Record' : 'New Performa'}</span>
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mt-2 text-[11px] sm:text-xs text-slate-600 uppercase tracking-wider font-mono">
+            <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200">
+              Performa ID: <strong className="font-bold">{performa.id}</strong>
+            </span>
+            <span className="hidden sm:inline">•</span>
+            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">Standard Format A4</span>
+            <span className="hidden sm:inline">•</span>
+            <span className={`px-2 py-0.5 rounded border font-semibold ${
+              isExisting ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            }`}>
+              {isExisting ? 'Existing Record' : 'New Performa'}
+            </span>
           </div>
         </div>
 
@@ -113,20 +118,20 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
         <div className="border border-slate-700 rounded-sm mb-4 text-xs sm:text-sm bg-slate-50/50">
           {/* Row 1: Location & Date */}
           <div className="grid grid-cols-1 md:grid-cols-12 border-b border-slate-700">
-            <div className="md:col-span-3 p-2 font-semibold bg-slate-100 flex items-center border-r border-slate-700">
+            <div className="md:col-span-3 p-2 font-semibold bg-slate-100 flex items-center border-b md:border-b-0 md:border-r border-slate-700">
               Location of Transformer
             </div>
-            <div className="md:col-span-4 p-1.5 flex flex-col justify-center border-r border-slate-700 bg-white">
+            <div className="md:col-span-4 p-1.5 flex flex-col justify-center border-b md:border-b-0 md:border-r border-slate-700 bg-white">
               <input
                 type="text"
                 disabled={isReadOnly}
                 value={performa.location}
                 onChange={(e) => handleHeaderChange('location', e.target.value)}
                 placeholder="Enter Transformer Site Location (Substation / DP / Feeder)"
-                className="w-full px-2 py-1 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-medium"
+                className="w-full px-2 py-1.5 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-medium"
               />
             </div>
-            <div className="md:col-span-2 p-2 font-semibold bg-slate-100 flex items-center justify-between border-r border-slate-700">
+            <div className="md:col-span-2 p-2 font-semibold bg-slate-100 flex items-center justify-between border-b md:border-b-0 md:border-r border-slate-700">
               <span>DATE</span>
               <Calendar className="w-3.5 h-3.5 text-slate-500" />
             </div>
@@ -136,27 +141,27 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 disabled={isReadOnly}
                 value={performa.date}
                 onChange={(e) => handleHeaderChange('date', e.target.value)}
-                className="w-full px-2 py-1 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-mono"
+                className="w-full px-2 py-1.5 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-mono"
               />
             </div>
           </div>
 
           {/* Row 2: Transformer Make & Serial No */}
           <div className="grid grid-cols-1 md:grid-cols-12 border-b border-slate-700">
-            <div className="md:col-span-3 p-2 font-semibold bg-slate-100 flex items-center border-r border-slate-700">
+            <div className="md:col-span-3 p-2 font-semibold bg-slate-100 flex items-center border-b md:border-b-0 md:border-r border-slate-700">
               Transformer Make
             </div>
-            <div className="md:col-span-4 p-1.5 flex items-center border-r border-slate-700 bg-white">
+            <div className="md:col-span-4 p-1.5 flex items-center border-b md:border-b-0 md:border-r border-slate-700 bg-white">
               <input
                 type="text"
                 disabled={isReadOnly}
                 value={performa.transformerMake}
                 onChange={(e) => handleHeaderChange('transformerMake', e.target.value)}
                 placeholder="e.g. W&P / NIK-SAN / ABB"
-                className="w-full px-2 py-1 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-medium"
+                className="w-full px-2 py-1.5 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-medium"
               />
             </div>
-            <div className="md:col-span-2 p-2 font-semibold bg-slate-100 flex items-center border-r border-slate-700">
+            <div className="md:col-span-2 p-2 font-semibold bg-slate-100 flex items-center border-b md:border-b-0 md:border-r border-slate-700">
               Transformer serial no.
             </div>
             <div className="md:col-span-3 p-1.5 flex items-center bg-white">
@@ -166,27 +171,27 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 value={performa.transformerSerialNo}
                 onChange={(e) => handleHeaderChange('transformerSerialNo', e.target.value)}
                 placeholder="e.g. IT 1434"
-                className="w-full px-2 py-1 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-mono font-medium"
+                className="w-full px-2 py-1.5 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-mono font-medium"
               />
             </div>
           </div>
 
           {/* Row 3: Capacity & Performa ID */}
           <div className="grid grid-cols-1 md:grid-cols-12">
-            <div className="md:col-span-3 p-2 font-semibold bg-slate-100 flex items-center border-r border-slate-700">
+            <div className="md:col-span-3 p-2 font-semibold bg-slate-100 flex items-center border-b md:border-b-0 md:border-r border-slate-700">
               CAPACITY
             </div>
-            <div className="md:col-span-4 p-1.5 flex items-center border-r border-slate-700 bg-white">
+            <div className="md:col-span-4 p-1.5 flex items-center border-b md:border-b-0 md:border-r border-slate-700 bg-white">
               <input
                 type="text"
                 disabled={isReadOnly}
                 value={performa.capacity}
                 onChange={(e) => handleHeaderChange('capacity', e.target.value)}
                 placeholder="0"
-                className="w-full px-2 py-1 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-medium"
+                className="w-full px-2 py-1.5 bg-transparent border border-slate-300 rounded focus:border-blue-600 focus:bg-blue-50/30 outline-none text-slate-800 font-medium"
               />
             </div>
-            <div className="md:col-span-2 p-2 font-semibold bg-slate-100 flex items-center border-r border-slate-700">
+            <div className="md:col-span-2 p-2 font-semibold bg-slate-100 flex items-center border-b md:border-b-0 md:border-r border-slate-700">
               Performa ID
             </div>
             <div className="md:col-span-3 p-1.5 flex items-center bg-white">
@@ -196,7 +201,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 value={performa.id}
                 onChange={(e) => handleHeaderChange('id', e.target.value)}
                 placeholder="e.g. AHM-001"
-                className={`w-full px-2 py-1 bg-transparent border rounded font-mono font-bold text-blue-700 outline-none ${
+                className={`w-full px-2 py-1.5 bg-transparent border rounded font-mono font-bold text-blue-700 outline-none ${
                   duplicateError ? 'border-red-500 bg-red-50' : 'border-slate-300 focus:border-blue-600 focus:bg-blue-50/30'
                 }`}
               />
@@ -205,20 +210,30 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
         </div>
 
         {/* Maintenance Items Table (Rows 1 to 18) */}
-        <div className="overflow-x-auto border border-slate-700 rounded-sm mb-4">
-          <table className="w-full border-collapse text-left text-[11px] sm:text-xs">
-            <thead>
-              <tr className="bg-slate-100 border-b border-slate-700 text-slate-800 font-bold uppercase tracking-wider text-center">
-                <th className="py-2 px-1.5 border-r border-slate-700 w-10">Sr No</th>
-                <th className="py-2 px-3 border-r border-slate-700 text-left">Description</th>
-                <th className="py-2 px-2 border-r border-slate-700 w-14">Unit</th>
-                <th className="py-2 px-2 border-r border-slate-700 w-28">Material Yes/No</th>
-                <th className="py-2 px-2 border-r border-slate-700 w-28">Labour Yes/No</th>
-                <th className="py-2 px-2 border-r border-slate-700 w-14">QTY</th>
-                <th className="py-2 px-2 w-28">Remarks</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-300">
+        <div className="border border-slate-700 rounded-sm mb-4 overflow-hidden">
+          {/* Mobile swipe helper */}
+          <div className="flex items-center justify-between text-[11px] text-blue-700 bg-blue-50 px-2.5 py-1.5 border-b border-blue-200 md:hidden">
+            <span className="flex items-center gap-1 font-medium">
+              <ArrowLeftRight className="w-3.5 h-3.5 animate-pulse text-blue-600" /> 
+              Swipe horizontally to view all columns
+            </span>
+            <span className="font-bold text-slate-600">{performa.items.length} items</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-[11px] sm:text-xs min-w-[700px]">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-700 text-slate-800 font-bold uppercase tracking-wider text-center">
+                  <th className="py-2 px-1.5 border-r border-slate-700 w-10">Sr No</th>
+                  <th className="py-2 px-3 border-r border-slate-700 text-left">Description</th>
+                  <th className="py-2 px-2 border-r border-slate-700 w-14">Unit</th>
+                  <th className="py-2 px-2 border-r border-slate-700 w-28">Material Yes/No</th>
+                  <th className="py-2 px-2 border-r border-slate-700 w-28">Labour Yes/No</th>
+                  <th className="py-2 px-2 border-r border-slate-700 w-14">QTY</th>
+                  <th className="py-2 px-2 w-28">Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-300">
               {performa.items.map((item, index) => {
                 const prevItem = index > 0 ? performa.items[index - 1] : null;
                 const isFirstOfGroup = !prevItem || prevItem.srNo !== item.srNo;
@@ -341,19 +356,18 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
 
         {/* Rows 19 & 20: Voltage and Ampere Measurements Grid */}
-        <div className="border border-slate-700 rounded-sm mb-6 text-xs sm:text-sm">
+        <div className="border border-slate-700 rounded-sm mb-6 text-xs sm:text-sm overflow-hidden">
           {/* Row 19: Voltage */}
-          <div className="grid grid-cols-12 border-b border-slate-700 bg-white items-center">
-            <div className="col-span-1 p-2 font-bold text-center border-r border-slate-700 bg-slate-50">
-              19
+          <div className="flex flex-col sm:grid sm:grid-cols-12 border-b border-slate-700 bg-white items-stretch sm:items-center">
+            <div className="flex items-center sm:col-span-4 border-b sm:border-b-0 sm:border-r border-slate-700 bg-slate-100 font-semibold text-slate-800">
+              <span className="w-8 sm:w-10 py-2 px-1 font-bold text-center border-r border-slate-700 bg-slate-200/80">19</span>
+              <span className="px-2.5 py-1.5 font-bold">Voltage (Volts)</span>
             </div>
-            <div className="col-span-3 p-2 font-semibold border-r border-slate-700 bg-slate-100 text-slate-800">
-              Voltage
-            </div>
-            <div className="col-span-8 grid grid-cols-3 divide-x divide-slate-700 text-center">
-              <div className="p-1.5">
+            <div className="sm:col-span-8 grid grid-cols-3 divide-x divide-slate-700 text-center">
+              <div className="p-1.5 sm:p-2">
                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">R-N</span>
                 <input
                   type="text"
@@ -361,10 +375,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   value={performa.measurements.voltageRN}
                   onChange={(e) => handleMeasurementChange('voltageRN', e.target.value)}
                   placeholder="0"
-                  className="w-full text-center px-1 py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
+                  className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
                 />
               </div>
-              <div className="p-1.5">
+              <div className="p-1.5 sm:p-2">
                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Y-N</span>
                 <input
                   type="text"
@@ -372,10 +386,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   value={performa.measurements.voltageYN}
                   onChange={(e) => handleMeasurementChange('voltageYN', e.target.value)}
                   placeholder="0"
-                  className="w-full text-center px-1 py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
+                  className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
                 />
               </div>
-              <div className="p-1.5">
+              <div className="p-1.5 sm:p-2">
                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">B-N</span>
                 <input
                   type="text"
@@ -383,22 +397,20 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   value={performa.measurements.voltageBN}
                   onChange={(e) => handleMeasurementChange('voltageBN', e.target.value)}
                   placeholder="0"
-                  className="w-full text-center px-1 py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
+                  className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
                 />
               </div>
             </div>
           </div>
 
           {/* Row 20: Ampere */}
-          <div className="grid grid-cols-12 bg-white items-center">
-            <div className="col-span-1 p-2 font-bold text-center border-r border-slate-700 bg-slate-50">
-              20
+          <div className="flex flex-col sm:grid sm:grid-cols-12 bg-white items-stretch sm:items-center">
+            <div className="flex items-center sm:col-span-4 border-b sm:border-b-0 sm:border-r border-slate-700 bg-slate-100 font-semibold text-slate-800">
+              <span className="w-8 sm:w-10 py-2 px-1 font-bold text-center border-r border-slate-700 bg-slate-200/80">20</span>
+              <span className="px-2.5 py-1.5 font-bold">Ampere (Amps)</span>
             </div>
-            <div className="col-span-3 p-2 font-semibold border-r border-slate-700 bg-slate-100 text-slate-800">
-              Ampere
-            </div>
-            <div className="col-span-8 grid grid-cols-4 divide-x divide-slate-700 text-center">
-              <div className="p-1.5">
+            <div className="sm:col-span-8 grid grid-cols-4 divide-x divide-slate-700 text-center">
+              <div className="p-1.5 sm:p-2">
                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">R</span>
                 <input
                   type="text"
@@ -406,10 +418,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   value={performa.measurements.ampereR}
                   onChange={(e) => handleMeasurementChange('ampereR', e.target.value)}
                   placeholder="0"
-                  className="w-full text-center px-1 py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
+                  className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
                 />
               </div>
-              <div className="p-1.5">
+              <div className="p-1.5 sm:p-2">
                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Y</span>
                 <input
                   type="text"
@@ -417,10 +429,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   value={performa.measurements.ampereY}
                   onChange={(e) => handleMeasurementChange('ampereY', e.target.value)}
                   placeholder="0"
-                  className="w-full text-center px-1 py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
+                  className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
                 />
               </div>
-              <div className="p-1.5">
+              <div className="p-1.5 sm:p-2">
                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">B</span>
                 <input
                   type="text"
@@ -428,10 +440,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   value={performa.measurements.ampereB}
                   onChange={(e) => handleMeasurementChange('ampereB', e.target.value)}
                   placeholder="0"
-                  className="w-full text-center px-1 py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
+                  className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
                 />
               </div>
-              <div className="p-1.5">
+              <div className="p-1.5 sm:p-2">
                 <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">N</span>
                 <input
                   type="text"
@@ -439,7 +451,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   value={performa.measurements.ampereN}
                   onChange={(e) => handleMeasurementChange('ampereN', e.target.value)}
                   placeholder="0"
-                  className="w-full text-center px-1 py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
+                  className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
                 />
               </div>
             </div>
@@ -447,7 +459,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
         </div>
 
         {/* Performa Footer / Signature Section for Official Printouts */}
-        <div className="grid grid-cols-2 gap-8 pt-8 mt-4 border-t border-slate-400 text-xs text-slate-600">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 pt-6 sm:pt-8 mt-4 border-t border-slate-400 text-xs text-slate-600">
           <div>
             <div className="flex items-center space-x-2 mb-1">
               <span className="font-semibold text-slate-800">Field Engineer / Technician Signature:</span>
@@ -455,7 +467,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
             </div>
             <div className="border-b border-dashed border-slate-400 h-6"></div>
           </div>
-          <div className="text-right">
+          <div className="text-left sm:text-right">
             <div className="font-semibold text-slate-800 mb-1">Authorized Discom Officer Signature</div>
             <div className="border-b border-dashed border-slate-400 h-6"></div>
           </div>
@@ -464,13 +476,13 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
 
       {/* Action Controls directly below the A4 sheet (Hidden during print) */}
       {!isReadOnly && (
-        <div className="w-full max-w-[850px] mt-6 flex flex-wrap items-center justify-between gap-4 p-4 bg-white border border-slate-200 rounded-xl shadow-lg print:hidden">
-          <div className="flex items-center space-x-3">
+        <div className="w-full max-w-[850px] mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-white border border-slate-200 rounded-xl shadow-lg print:hidden mb-16 sm:mb-0">
+          <div className="flex items-center justify-between sm:justify-start space-x-3">
             {onDelete && isExisting && (
               <button
                 type="button"
                 onClick={onDelete}
-                className="flex items-center space-x-1.5 px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded-lg text-sm font-semibold transition-colors"
+                className="flex items-center space-x-1.5 px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4 text-red-600" />
                 <span>Delete Performa</span>
@@ -485,7 +497,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
             <button
               type="button"
               onClick={onSaveAndClose}
-              className="flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow transition-all hover:shadow-md"
+              className="flex-1 sm:flex-initial flex items-center justify-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow transition-all hover:shadow-md cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>Save & Close</span>
@@ -494,10 +506,51 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
             <button
               type="button"
               onClick={onSaveAndAddAnother}
-              className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-md transition-all hover:shadow-lg active:scale-95"
+              className="flex-1 sm:flex-initial flex items-center justify-center space-x-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold shadow-md transition-all hover:shadow-lg active:scale-95 cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Save & Add Another</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Sticky Bottom Action Bar for field technicians (Hidden on desktop & print) */}
+      {!isReadOnly && (
+        <div className="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-300 p-2.5 shadow-2xl flex items-center justify-between gap-2 sm:hidden print:hidden">
+          <div className="flex flex-col min-w-0 pr-1">
+            <span className="text-[10px] text-slate-500 font-mono">Performa ID</span>
+            <span className="text-xs font-bold font-mono text-blue-700 truncate">{performa.id}</span>
+          </div>
+
+          <div className="flex items-center space-x-1.5 flex-shrink-0">
+            {onDelete && isExisting && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="p-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs"
+                title="Delete"
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onSaveAndClose}
+              className="flex items-center space-x-1 px-3 py-2 bg-blue-600 active:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Save</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onSaveAndAddAnother}
+              className="flex items-center space-x-1 px-3 py-2 bg-emerald-600 active:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+ Save & Next</span>
             </button>
           </div>
         </div>

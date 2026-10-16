@@ -31,30 +31,30 @@ export const ImportSummaryModal: React.FC<ImportSummaryModalProps> = ({
   if (!summary) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold flex-shrink-0">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-bold text-base text-slate-900">Excel Import Summary</h2>
+              <h2 className="font-bold text-sm sm:text-base text-slate-900">Excel Import Summary</h2>
               <p className="text-xs text-slate-500">Sheet: <span className="font-semibold text-blue-700">{summary.sheetName}</span></p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Summary Metrics Cards */}
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* Existing */}
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-center">

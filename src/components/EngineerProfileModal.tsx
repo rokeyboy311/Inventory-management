@@ -74,8 +74,8 @@ export const EngineerProfileModal: React.FC<EngineerProfileModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 animate-fadeIn">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col max-h-[92vh]">
         {/* Banner with Electric Theme */}
         <div className="relative bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-6 pb-16 text-white">
           <button
@@ -163,7 +163,7 @@ export const EngineerProfileModal: React.FC<EngineerProfileModalProps> = ({
         </div>
 
         {/* Profile Info Details */}
-        <div className="p-6 space-y-4 text-slate-800">
+        <div className="p-5 sm:p-6 space-y-4 text-slate-800 overflow-y-auto flex-1">
           <div>
             {isEditing ? (
               <div className="space-y-2">
