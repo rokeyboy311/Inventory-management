@@ -85,6 +85,8 @@ import { AdminPanel } from './components/admin/AdminPanel';
 import { UserDashboard } from './components/user/UserDashboard';
 import { BillSheetViewer } from './components/BillSheetViewer';
 import { SupabaseSettingsModal } from './components/admin/SupabaseSettingsModal';
+import { subscribeToDatabaseChanges, isSupabaseConnected } from './utils/supabaseClient';
+import { RefreshCw } from 'lucide-react';
 
 export function App() {
   // -------------------------------------------------------------
@@ -230,14 +232,26 @@ export function App() {
   useEffect(() => {
     reloadData();
 
-    // Listen to real-time broadcast channel from Admin/User tabs
+    // 1. Live Realtime listener across all users and devices
+    const unsubscribeRealtime = subscribeToDatabaseChanges(() => {
+      reloadData();
+    });
+
+    // 2. Broadcast channel listener for tabs on same device
     const handleBroadcast = () => {
       reloadData();
     };
-
     syncBroadcastChannel?.addEventListener('message', handleBroadcast);
+
+    // 3. Cloud polling heartbeat every 6 seconds to ensure complete sync
+    const syncHeartbeat = setInterval(() => {
+      reloadData();
+    }, 6000);
+
     return () => {
+      if (unsubscribeRealtime) unsubscribeRealtime();
       syncBroadcastChannel?.removeEventListener('message', handleBroadcast);
+      clearInterval(syncHeartbeat);
     };
   }, []);
 
@@ -692,6 +706,31 @@ export function App() {
 
         {/* Right: Actions */}
         <div className="flex items-center space-x-2">
+          {/* Live Cloud Status */}
+          <div 
+            onClick={() => setIsSupabaseModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 hover:border-slate-600 text-xs cursor-pointer transition-colors"
+            title={isSupabaseConnected() ? "Live Supabase Cloud Connected (All users synced)" : "Click to connect Supabase Cloud"}
+          >
+            <span className={`w-2 h-2 rounded-full ${isSupabaseConnected() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span className="hidden md:inline font-mono text-[11px] text-slate-300">
+              {isSupabaseConnected() ? 'Cloud Synced' : 'Offline / Local'}
+            </span>
+          </div>
+
+          {/* Quick Sync Button */}
+          <button
+            type="button"
+            onClick={async () => {
+              await reloadData();
+              showNotification('Synchronized latest data from cloud');
+            }}
+            className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            title="Force refresh data from cloud"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+
           {/* Supabase SQL Database Config */}
           <button
             type="button"

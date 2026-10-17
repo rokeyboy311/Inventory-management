@@ -97,6 +97,14 @@ export async function loadTeamsFromStorage(): Promise<Team[]> {
     if (remoteTeams && remoteTeams.length > 0) {
       localStorage.setItem('dgvcl_teams_v1', JSON.stringify(remoteTeams));
       return remoteTeams;
+    } else if (remoteTeams && remoteTeams.length === 0) {
+      // Remote connected but table is empty. Seed remote teams into Supabase!
+      const defaults = createDefaultTeams();
+      for (const t of defaults) {
+        await upsertTeamSupabase(t);
+      }
+      localStorage.setItem('dgvcl_teams_v1', JSON.stringify(defaults));
+      return defaults;
     }
   } catch {
     // fallback to local
@@ -174,8 +182,12 @@ export async function saveTeamToStorage(team: Team): Promise<void> {
     // handled in localStorage fallback
   }
 
-  // Sync to Supabase in background
-  upsertTeamSupabase(team).catch(() => {});
+  // Guaranteed sync to Supabase Cloud
+  try {
+    await upsertTeamSupabase(team);
+  } catch (err) {
+    console.warn('Supabase team sync error:', err);
+  }
 
   syncBroadcastChannel?.postMessage({ type: 'TEAM_UPDATED', teamId: team.id });
 }
@@ -270,6 +282,12 @@ export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
     if (remoteWorkbooks && remoteWorkbooks.length > 0) {
       localStorage.setItem('performa_workbooks_v2', JSON.stringify(remoteWorkbooks));
       return remoteWorkbooks;
+    } else if (remoteWorkbooks && remoteWorkbooks.length === 0) {
+      // Remote connected but table is empty. Seed initial Dolvan workbook into Supabase!
+      const initial = [createInitialWorkbook('Dolvan')];
+      await upsertWorkbookSupabase(initial[0]);
+      localStorage.setItem('performa_workbooks_v2', JSON.stringify(initial));
+      return initial;
     }
   } catch {
     // fallback
@@ -353,8 +371,12 @@ export async function saveWorkbookToStorage(workbook: LocationWorkbook): Promise
     // fallback
   }
 
-  // Sync to Supabase in background
-  upsertWorkbookSupabase(workbook).catch(() => {});
+  // Guaranteed sync to Supabase Cloud
+  try {
+    await upsertWorkbookSupabase(workbook);
+  } catch (err) {
+    console.warn('Supabase workbook sync error:', err);
+  }
 
   syncBroadcastChannel?.postMessage({ type: 'WORKBOOK_UPDATED', locationId: workbook.locationId });
 }

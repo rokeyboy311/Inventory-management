@@ -73,6 +73,26 @@ GRANT ALL ON TABLE public.workbooks TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.performas TO anon, authenticated, service_role;
 
 -- =====================================================================
+-- REALTIME LIVE BROADCAST (Enables instant sync across all users)
+-- =====================================================================
+ALTER TABLE public.teams REPLICA IDENTITY FULL;
+ALTER TABLE public.workbooks REPLICA IDENTITY FULL;
+ALTER TABLE public.performas REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'teams') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.teams;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'workbooks') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.workbooks;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'performas') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.performas;
+  END IF;
+END $$;
+
+-- =====================================================================
 -- INITIAL SEED DATA (Dolvan Maintenance Team + Initial Location Workbook)
 -- =====================================================================
 

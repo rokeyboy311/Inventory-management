@@ -18,7 +18,8 @@ import {
   getSupabaseConfig, 
   saveSupabaseConfig, 
   clearSupabaseConfig, 
-  testSupabaseConnection 
+  testSupabaseConnection,
+  DEFAULT_SUPABASE_PROJECT_URL 
 } from '../../utils/supabaseClient';
 
 interface SupabaseSettingsModalProps {
@@ -38,15 +39,15 @@ export function SupabaseSettingsModal({ isOpen, onClose, onConnectionChanged }: 
     if (isOpen) {
       const config = getSupabaseConfig();
       if (config) {
-        setUrl(config.url);
+        setUrl(config.url || DEFAULT_SUPABASE_PROJECT_URL);
         setKey(config.key);
         setStatus('idle');
         setStatusMessage('Currently configured. Click "Test Connection" to verify.');
       } else {
-        setUrl('');
+        setUrl(DEFAULT_SUPABASE_PROJECT_URL);
         setKey('');
         setStatus('idle');
-        setStatusMessage('Not connected yet. Enter your Supabase credentials below.');
+        setStatusMessage('Enter your Supabase project API Key below to sync all users live.');
       }
     }
   }, [isOpen]);
@@ -140,6 +141,24 @@ ALTER TABLE public.performas DISABLE ROW LEVEL SECURITY;
 GRANT ALL ON TABLE public.teams TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.workbooks TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.performas TO anon, authenticated, service_role;
+
+-- Realtime Live Broadcast
+ALTER TABLE public.teams REPLICA IDENTITY FULL;
+ALTER TABLE public.workbooks REPLICA IDENTITY FULL;
+ALTER TABLE public.performas REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'teams') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.teams;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'workbooks') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.workbooks;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'performas') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.performas;
+  END IF;
+END $$;
 `;
     navigator.clipboard.writeText(sql);
     setCopiedSql(true);
@@ -217,10 +236,20 @@ GRANT ALL ON TABLE public.performas TO anon, authenticated, service_role;
 
           {/* Supabase Key */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
-              <span>Supabase Key (Service Role or Anon Key) <span className="text-red-400">*</span></span>
-              <span className="text-[10px] text-emerald-400 font-normal">Service Role recommended for full admin access</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Supabase API Key (Anon or Service Role) <span className="text-red-400">*</span>
+              </label>
+              <a 
+                href="https://supabase.com/dashboard/project/qpxyucolxkzvyjjceywa/settings/api" 
+                target="_blank" 
+                rel="noreferrer"
+                className="text-[11px] text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 font-medium"
+              >
+                <span>Get key from Supabase Dashboard</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
             <div className="relative">
               <Key className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
               <input

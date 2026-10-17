@@ -13,6 +13,8 @@ export interface SupabaseConfig {
 // -------------------------------------------------------------
 // Config Retrieval & Storage
 // -------------------------------------------------------------
+export const DEFAULT_SUPABASE_PROJECT_URL = 'https://qpxyucolxkzvyjjceywa.supabase.co';
+
 export function getSupabaseConfig(): SupabaseConfig | null {
   // 1. Check localStorage
   if (typeof window !== 'undefined') {
@@ -28,7 +30,7 @@ export function getSupabaseConfig(): SupabaseConfig | null {
   }
 
   // 2. Check import.meta.env
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
+  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || DEFAULT_SUPABASE_PROJECT_URL;
   const envKey = (import.meta as any).env?.VITE_SUPABASE_SERVICE_ROLE_KEY || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
 
   if (envUrl && envKey) {
@@ -245,3 +247,46 @@ export async function deleteWorkbookSupabase(locationId: string): Promise<boolea
     return false;
   }
 }
+
+// -------------------------------------------------------------
+// Realtime Live Cross-User Sync Subscription
+// -------------------------------------------------------------
+export function subscribeToDatabaseChanges(onChange: () => void): (() => void) | null {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    const channel = client
+      .channel('dgvcl_live_cross_user_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'teams' },
+        (payload) => {
+          console.log('[Supabase Realtime] Team update event:', payload.eventType);
+          onChange();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'workbooks' },
+        (payload) => {
+          console.log('[Supabase Realtime] Workbook update event:', payload.eventType);
+          onChange();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Realtime subscription registration warning:', err);
+    return null;
+  }
+}
+
+export function isSupabaseConnected(): boolean {
+  const config = getSupabaseConfig();
+  return !!(config && config.url && config.key);
+}
+

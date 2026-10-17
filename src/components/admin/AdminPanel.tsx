@@ -28,6 +28,7 @@ import {
 } from '../../utils/storage';
 import { CreateTeamModal } from './CreateTeamModal';
 import { SupabaseSettingsModal } from './SupabaseSettingsModal';
+import { isSupabaseConnected } from '../../utils/supabaseClient';
 
 interface AdminPanelProps {
   onNavigateToUser: (teamId?: string) => void;
@@ -164,6 +165,18 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Live Cloud Status */}
+          <div 
+            onClick={() => setIsSupabaseModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-600 text-xs cursor-pointer transition-colors"
+            title={isSupabaseConnected() ? "Live Supabase Cloud Connected (All users synced)" : "Click to connect Supabase Cloud"}
+          >
+            <span className={`w-2 h-2 rounded-full ${isSupabaseConnected() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span className="font-mono text-[11px] text-slate-300">
+              {isSupabaseConnected() ? 'Cloud Synced' : 'Offline / Local'}
+            </span>
+          </div>
+
           {/* Supabase SQL Database Config Button */}
           <button
             onClick={() => setIsSupabaseModalOpen(true)}
