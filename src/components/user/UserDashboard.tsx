@@ -49,20 +49,23 @@ export function UserDashboard({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
-  // Workbooks filtered for active team
+  // Workbooks filtered for active team (unassigned workbooks fall back cleanly to primary team)
+  const isPrimaryTeam = teams.length > 0 && selectedTeam?.id === teams[0].id;
   const teamWorkbooks = selectedTeam 
-    ? workbooks.filter(w => w.teamId === selectedTeam.id || !w.teamId) // fallback to all if unassigned
+    ? workbooks.filter(w => w.teamId === selectedTeam.id || (!w.teamId && isPrimaryTeam))
     : [];
 
+  const q = searchQuery.toLowerCase();
   const filteredWorkbooks = teamWorkbooks.filter(w => 
-    w.locationName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    w.workbookName.toLowerCase().includes(searchQuery.toLowerCase())
+    (w.locationName || '').toLowerCase().includes(q) ||
+    (w.workbookName || '').toLowerCase().includes(q)
   );
 
   const filteredTeams = teams.filter(t => 
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.subdivision.toLowerCase().includes(searchQuery.toLowerCase())
+    (t.name || '').toLowerCase().includes(q) ||
+    (t.code || '').toLowerCase().includes(q) ||
+    (t.subdivision || '').toLowerCase().includes(q) ||
+    (t.division || '').toLowerCase().includes(q)
   );
 
   // -------------------------------------------------------------
@@ -232,7 +235,7 @@ export function UserDashboard({
               </h1>
             </div>
             <p className="text-xs text-slate-400">
-              {selectedTeam.division} Division · {selectedTeam.subdivision} Sub-Division · In-Charge: {selectedTeam.inChargeEngineer.name}
+              {selectedTeam.division || 'VYARA'} Division · {selectedTeam.subdivision || 'DOLVAN'} Sub-Division · In-Charge: {selectedTeam.inChargeEngineer?.name || 'Er. In-Charge'}
             </p>
           </div>
         </div>
@@ -366,7 +369,7 @@ export function UserDashboard({
 
                     <p className="text-[11px] text-slate-500 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      Last updated: {new Date(wb.lastModified).toLocaleDateString()}
+                      Last updated: {new Date(wb.lastModified || Date.now()).toLocaleDateString()}
                     </p>
                   </div>
 

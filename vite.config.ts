@@ -4,12 +4,17 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const rootDir = typeof import.meta.dirname !== 'undefined' ? import.meta.dirname : path.resolve('.');
+
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': rootDir,
       },
+    },
+    build: {
+      chunkSizeWarningLimit: 1200,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

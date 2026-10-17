@@ -129,13 +129,16 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
     }
   };
 
-  const filteredTeams = teams.filter(t => 
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.subdivision.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.division.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.inChargeEngineer.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTeams = teams.filter(t => {
+    const q = searchQuery.toLowerCase();
+    return (
+      (t.name || '').toLowerCase().includes(q) ||
+      (t.code || '').toLowerCase().includes(q) ||
+      (t.subdivision || '').toLowerCase().includes(q) ||
+      (t.division || '').toLowerCase().includes(q) ||
+      (t.inChargeEngineer?.name || '').toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -330,12 +333,12 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
                         In-Charge Engineer
                       </p>
                       <p className="text-xs font-bold text-slate-200">
-                        {team.inChargeEngineer.name}
+                        {team.inChargeEngineer?.name || 'Er. In-Charge'}
                       </p>
                       <p className="text-[11px] text-slate-400">
-                        {team.inChargeEngineer.designation}
+                        {team.inChargeEngineer?.designation || 'Junior Engineer'}
                       </p>
-                      {team.inChargeEngineer.contactNumber && (
+                      {team.inChargeEngineer?.contactNumber && (
                         <p className="text-[11px] text-emerald-400 flex items-center gap-1 pt-1 font-mono">
                           <Phone className="w-3 h-3" />
                           {team.inChargeEngineer.contactNumber}

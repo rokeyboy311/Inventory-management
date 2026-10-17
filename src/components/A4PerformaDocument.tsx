@@ -26,6 +26,16 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   viewMode
 }) => {
   const isReadOnly = viewMode === 'preview' || viewMode === 'print';
+  const measurements = performa.measurements || {
+    voltageRN: '0',
+    voltageYN: '0',
+    voltageBN: '0',
+    ampereR: '0',
+    ampereY: '0',
+    ampereB: '0',
+    ampereN: '0'
+  };
+  const items = performa.items || [];
 
   // Update top header fields
   const handleHeaderChange = (field: keyof PerformaRecord, value: any) => {
@@ -45,7 +55,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
     onChange({
       ...performa,
       measurements: {
-        ...performa.measurements,
+        ...measurements,
         [field]: value
       }
     });
@@ -54,7 +64,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   // Update item row fields
   const handleItemFieldChange = (index: number, field: keyof MaintenanceItemRow, value: any) => {
     if (isReadOnly) return;
-    const nextItems = [...performa.items];
+    const nextItems = [...items];
     nextItems[index] = {
       ...nextItems[index],
       [field]: value
@@ -217,7 +227,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
               <ArrowLeftRight className="w-3.5 h-3.5 animate-pulse text-blue-600" /> 
               Swipe horizontally to view all columns
             </span>
-            <span className="font-bold text-slate-600">{performa.items.length} items</span>
+            <span className="font-bold text-slate-600">{items.length} items</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -234,10 +244,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-300">
-              {performa.items.map((item, index) => {
-                const prevItem = index > 0 ? performa.items[index - 1] : null;
+              {items.map((item, index) => {
+                const prevItem = index > 0 ? items[index - 1] : null;
                 const isFirstOfGroup = !prevItem || prevItem.srNo !== item.srNo;
-                const groupCount = performa.items.filter(i => i.srNo === item.srNo).length;
+                const groupCount = items.filter(i => i.srNo === item.srNo).length;
 
                 return (
                   <tr 
@@ -372,7 +382,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <input
                   type="text"
                   disabled={isReadOnly}
-                  value={performa.measurements.voltageRN}
+                  value={measurements.voltageRN}
                   onChange={(e) => handleMeasurementChange('voltageRN', e.target.value)}
                   placeholder="0"
                   className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
@@ -383,7 +393,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <input
                   type="text"
                   disabled={isReadOnly}
-                  value={performa.measurements.voltageYN}
+                  value={measurements.voltageYN}
                   onChange={(e) => handleMeasurementChange('voltageYN', e.target.value)}
                   placeholder="0"
                   className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
@@ -394,7 +404,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <input
                   type="text"
                   disabled={isReadOnly}
-                  value={performa.measurements.voltageBN}
+                  value={measurements.voltageBN}
                   onChange={(e) => handleMeasurementChange('voltageBN', e.target.value)}
                   placeholder="0"
                   className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
@@ -415,7 +425,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <input
                   type="text"
                   disabled={isReadOnly}
-                  value={performa.measurements.ampereR}
+                  value={measurements.ampereR}
                   onChange={(e) => handleMeasurementChange('ampereR', e.target.value)}
                   placeholder="0"
                   className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
@@ -426,7 +436,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <input
                   type="text"
                   disabled={isReadOnly}
-                  value={performa.measurements.ampereY}
+                  value={measurements.ampereY}
                   onChange={(e) => handleMeasurementChange('ampereY', e.target.value)}
                   placeholder="0"
                   className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
@@ -437,7 +447,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <input
                   type="text"
                   disabled={isReadOnly}
-                  value={performa.measurements.ampereB}
+                  value={measurements.ampereB}
                   onChange={(e) => handleMeasurementChange('ampereB', e.target.value)}
                   placeholder="0"
                   className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"
@@ -448,7 +458,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <input
                   type="text"
                   disabled={isReadOnly}
-                  value={performa.measurements.ampereN}
+                  value={measurements.ampereN}
                   onChange={(e) => handleMeasurementChange('ampereN', e.target.value)}
                   placeholder="0"
                   className="w-full text-center px-1 py-1 sm:py-0.5 border border-slate-300 rounded font-mono font-bold text-slate-800 focus:border-blue-600 focus:bg-blue-50 outline-none"

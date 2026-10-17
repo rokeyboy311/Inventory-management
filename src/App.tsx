@@ -183,7 +183,10 @@ export function App() {
 
   // Active workbook helper
   const activeWorkbook = workbooks.find(w => w.locationId === activeLocationId) || workbooks[0];
-  const activeSheet = activeWorkbook?.sheets[activeSheetName] || activeWorkbook?.sheets['inventory'] || activeWorkbook?.sheets['Performas'];
+  const effectiveSheetName = (activeWorkbook?.sheets && activeSheetName in activeWorkbook.sheets)
+    ? activeSheetName
+    : (activeWorkbook?.sheets && 'inventory' in activeWorkbook.sheets ? 'inventory' : Object.keys(activeWorkbook?.sheets || {})[0] || 'inventory');
+  const activeSheet = activeWorkbook?.sheets[effectiveSheetName];
   const activePerformas: PerformaRecord[] = activeSheet?.performas || [];
 
   // Show notification banner helper
@@ -352,7 +355,7 @@ export function App() {
     // Update workbook
     const updatedSheets = {
       ...activeWorkbook.sheets,
-      [activeSheetName]: {
+      [effectiveSheetName]: {
         ...activeSheet,
         performas: nextPerformas,
         rawRowsCount: nextPerformas.length
@@ -455,7 +458,7 @@ export function App() {
       ...activeWorkbook,
       sheets: {
         ...activeWorkbook.sheets,
-        [activeSheetName]: {
+        [effectiveSheetName]: {
           ...activeSheet,
           performas: filtered,
           rawRowsCount: filtered.length

@@ -42,11 +42,11 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
   const filtered = performas.filter(p => {
     const q = searchTerm.toLowerCase();
     return (
-      p.id.toLowerCase().includes(q) ||
-      p.location.toLowerCase().includes(q) ||
-      p.transformerMake.toLowerCase().includes(q) ||
-      p.transformerSerialNo.toLowerCase().includes(q) ||
-      p.date.includes(q)
+      (p.id || '').toLowerCase().includes(q) ||
+      (p.location || '').toLowerCase().includes(q) ||
+      (p.transformerMake || '').toLowerCase().includes(q) ||
+      (p.transformerSerialNo || '').toLowerCase().includes(q) ||
+      (p.date || '').includes(q)
     );
   });
 
@@ -157,7 +157,7 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
               {filtered.map((p, index) => {
-                const totalActiveItems = p.items.filter(i => Number(i.qty) > 0 || i.materialYes || i.labourYes).length;
+                const totalActiveItems = (p.items || []).filter(i => Number(i.qty) > 0 || i.materialYes || i.labourYes).length;
 
                 return (
                   <div 
@@ -204,8 +204,8 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
 
                         {/* Measurements */}
                         <div className="flex items-center justify-between pt-1 text-[10px] text-slate-500 font-mono">
-                          <span>V: {p.measurements.voltageRN}/{p.measurements.voltageYN}/{p.measurements.voltageBN}V</span>
-                          <span>A: {p.measurements.ampereR}/{p.measurements.ampereY}/{p.measurements.ampereB}A</span>
+                          <span>V: {p.measurements?.voltageRN || '0'}/{p.measurements?.voltageYN || '0'}/{p.measurements?.voltageBN || '0'}V</span>
+                          <span>A: {p.measurements?.ampereR || '0'}/{p.measurements?.ampereY || '0'}/{p.measurements?.ampereB || '0'}A</span>
                         </div>
                       </div>
                     </div>
@@ -300,10 +300,10 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
                         {p.capacity || '—'}
                       </td>
                       <td className="py-2 px-3 border-r border-slate-200 text-center font-mono text-[11px] text-slate-600">
-                        {p.measurements.voltageRN}/{p.measurements.voltageYN}/{p.measurements.voltageBN} V
+                        {p.measurements?.voltageRN || '0'}/{p.measurements?.voltageYN || '0'}/{p.measurements?.voltageBN || '0'} V
                       </td>
                       <td className="py-2 px-3 border-r border-slate-200 text-center font-mono text-[11px] text-slate-600">
-                        {p.measurements.ampereR}/{p.measurements.ampereY}/{p.measurements.ampereB}/{p.measurements.ampereN} A
+                        {p.measurements?.ampereR || '0'}/{p.measurements?.ampereY || '0'}/{p.measurements?.ampereB || '0'}/{p.measurements?.ampereN || '0'} A
                       </td>
                       <td className="py-2 px-3 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
