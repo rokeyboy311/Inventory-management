@@ -35,16 +35,44 @@ export interface PerformaRecord {
   status?: 'saved' | 'draft';
 }
 
+export interface BillItem {
+  id: string;
+  srNo: number;
+  description: string;
+  unit: string;
+  qty: number;
+  rate: number;
+  labourRate: number;
+  materialAmount: number;
+  labourAmount: number;
+  totalAmount: number;
+  remarks: string;
+}
+
+export interface BillSheetDefinition {
+  name: string;
+  billNumber: string;
+  billDate: string;
+  contractorName: string;
+  workOrderRef: string;
+  items: BillItem[];
+  subTotal: number;
+  taxGst: number;
+  grandTotal: number;
+}
+
 export interface SheetDefinition {
   name: string;
-  type: 'performas' | 'maintenance' | 'measurements' | 'master_data' | 'other';
+  type: 'performas' | 'maintenance' | 'measurements' | 'master_data' | 'inventory' | 'bill' | 'other';
   performas: PerformaRecord[];
   isCompatible: boolean;
   rawRowsCount?: number;
+  billData?: BillSheetDefinition;
 }
 
 export interface LocationWorkbook {
   locationId: string;
+  teamId?: string;
   locationName: string;
   workbookName: string;
   activeSheetName: string;

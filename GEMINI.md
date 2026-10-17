@@ -36,3 +36,15 @@ These rules apply to all AI Agent tasks and sessions within this workspace. Foll
 - Use `replace_file_content` for localized, targeted edits instead of overwriting entire large files with `write_to_file`.
 - Avoid full repository grep/searches when the relevant file path is already identified or open in the user's workspace.
 - Keep file reads scoped with `StartLine` and `EndLine` parameters rather than dumping thousands of lines into context.
+
+---
+
+## 5. Compulsory GitHub Push Protocol (Mandatory on Every Prompt)
+- **Compulsory Automatic GitHub Update:** After working on any prompt, completing any feature, or modifying files, ALL changes MUST be compulsorily added, committed, and pushed to the GitHub repository (`origin main`).
+- **Standard Sequence:**
+  1. Verify zero lint errors (`bun run lint`).
+  2. Stage all modifications (`git add .`).
+  3. Commit with a meaningful, concise summary (`git commit -m "..."`).
+  4. Push to remote (`git push origin main`).
+- Never conclude a prompt response without physically syncing and pushing the latest changes to GitHub.
+

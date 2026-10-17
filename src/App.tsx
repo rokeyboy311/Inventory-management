@@ -19,7 +19,13 @@ import {
   PlusCircle,
   AlertCircle,
   Table,
-  FolderPlus
+  FolderPlus,
+  ArrowLeft,
+  Trash2,
+  Download,
+  Shield,
+  Users,
+  Database
 } from 'lucide-react';
 
 import { 
@@ -27,8 +33,11 @@ import {
   LocationWorkbook, 
   ImportSummary, 
   createBlankPerforma,
-  DEFAULT_PERFORMA_ITEMS_TEMPLATE
+  DEFAULT_PERFORMA_ITEMS_TEMPLATE,
+  BillSheetDefinition
 } from './types/performa';
+
+import { Team } from './types/team';
 
 import { 
   getNextPerformaId, 
@@ -38,10 +47,14 @@ import {
 import { 
   loadWorkbooksFromStorage, 
   saveWorkbookToStorage, 
+  deleteWorkbookFromStorage,
   saveUnsavedDraft, 
   getUnsavedDraft, 
   clearUnsavedDraft,
-  createNewLocationWorkbook,
+  createNewLocationWorkbookWithDualSheets,
+  loadTeamsFromStorage,
+  saveTeamToStorage,
+  syncBroadcastChannel,
   UnsavedDraftState
 } from './utils/storage';
 
@@ -51,6 +64,11 @@ import {
   exportPerformasToExcel, 
   downloadSampleExcel 
 } from './utils/excelHandler';
+
+import { 
+  exportDualSheetLocationExcel, 
+  createDefaultBillSheet 
+} from './utils/dolvanTemplate';
 
 import { A4PerformaDocument } from './components/A4PerformaDocument';
 import { ExcelImportSidebar } from './components/ExcelImportSidebar';
@@ -63,30 +81,72 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { PWAInstallModal } from './components/PWAInstallModal';
 import { EngineerProfileModal } from './components/EngineerProfileModal';
 import { ExportReferenceModal } from './components/ExportReferenceModal';
+import { AdminPanel } from './components/admin/AdminPanel';
+import { UserDashboard } from './components/user/UserDashboard';
+import { BillSheetViewer } from './components/BillSheetViewer';
+import { SupabaseSettingsModal } from './components/admin/SupabaseSettingsModal';
 
 export function App() {
-  // Direct file input ref for top action bar upload
-  const toolbarFileInputRef = useRef<HTMLInputElement>(null);
+  // -------------------------------------------------------------
+  // Route Management: /admin vs /
+  // -------------------------------------------------------------
+  const [currentRoute, setCurrentRoute] = useState<'user' | 'admin'>(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname.startsWith('/admin') || window.location.hash === '#admin') {
+        return 'admin';
+      }
+    }
+    return 'user';
+  });
+
+  const navigateTo = (path: string) => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', path);
+      if (path.startsWith('/admin') || path === '#admin') {
+        setCurrentRoute('admin');
+      } else {
+        setCurrentRoute('user');
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (window.location.pathname.startsWith('/admin') || window.location.hash === '#admin') {
+        setCurrentRoute('admin');
+      } else {
+        setCurrentRoute('user');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // -------------------------------------------------------------
+  // Core State: Teams & Workbooks
+  // -------------------------------------------------------------
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [isWorkbookOpen, setIsWorkbookOpen] = useState(false);
 
   // All workbooks / locations
   const [workbooks, setWorkbooks] = useState<LocationWorkbook[]>([]);
-  const [activeLocationId, setActiveLocationId] = useState<string>('ahmedabad');
-  const [activeSheetName, setActiveSheetName] = useState<string>('Performas');
+  const [activeLocationId, setActiveLocationId] = useState<string>('dolvan');
+  const [activeSheetName, setActiveSheetName] = useState<string>('inventory');
 
   // Main view tab: 'form' (A4 document) vs 'table' (Excel sheet data table) vs 'files' (Mobile sidebar)
   const [mainViewTab, setMainViewTab] = useState<'form' | 'table' | 'files'>('form');
 
-  // Create Location Excel Modal
+  // Modals
   const [isCreateLocationModalOpen, setIsCreateLocationModalOpen] = useState(false);
-  // Engineer Profile Modal & PWA Install Modal
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
-  // Export Reference Modal (DOLVAN INVENTERY.xlsx Sheet1)
   const [isExportReferenceModalOpen, setIsExportReferenceModalOpen] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   // Active performa currently in the A4 editor
   const [currentPerforma, setCurrentPerforma] = useState<PerformaRecord>(() => 
-    createBlankPerforma('AHM-001', '')
+    createBlankPerforma('DOL-001', '')
   );
 
   // Original ID of current performa if editing an existing record
@@ -118,9 +178,12 @@ export function App() {
   const [history, setHistory] = useState<PerformaRecord[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(0);
 
+  // Direct file input ref for top action bar upload
+  const toolbarFileInputRef = useRef<HTMLInputElement>(null);
+
   // Active workbook helper
   const activeWorkbook = workbooks.find(w => w.locationId === activeLocationId) || workbooks[0];
-  const activeSheet = activeWorkbook?.sheets[activeSheetName] || activeWorkbook?.sheets['Performas'];
+  const activeSheet = activeWorkbook?.sheets[activeSheetName] || activeWorkbook?.sheets['inventory'] || activeWorkbook?.sheets['Performas'];
   const activePerformas: PerformaRecord[] = activeSheet?.performas || [];
 
   // Show notification banner helper
@@ -146,39 +209,33 @@ export function App() {
     setHistoryIndex(prev => prev + 1);
   };
 
-  // Initial load from storage
-  useEffect(() => {
-    async function init() {
-      const loaded = await loadWorkbooksFromStorage();
-      setWorkbooks(loaded);
+  // -------------------------------------------------------------
+  // Initial Data Loading & Real-time Sync
+  // -------------------------------------------------------------
+  const reloadData = async () => {
+    const loadedTeams = await loadTeamsFromStorage();
+    const loadedWorkbooks = await loadWorkbooksFromStorage();
+    setTeams(loadedTeams);
+    setWorkbooks(loadedWorkbooks);
 
-      if (loaded.length > 0) {
-        const initialWb = loaded[0];
-        setActiveLocationId(initialWb.locationId);
-        setActiveSheetName(initialWb.activeSheetName || 'Performas');
-
-        const sheet = initialWb.sheets[initialWb.activeSheetName || 'Performas'];
-        const performas = sheet?.performas || [];
-        
-        // As per requirement: When arriving at the file, start from the next continuous Sr No
-        // so no entries are displaced or added out of order
-        const nextId = getNextPerformaId(performas, initialWb.locationName);
-        const blank = createBlankPerforma(nextId, '');
-        setCurrentPerforma(blank);
-        setOriginalEditingId(null);
-        initHistory(blank);
-      } else {
-        // If no workbooks, open create location modal immediately
-        setIsCreateLocationModalOpen(true);
-      }
-
-      // Check for unsaved draft
-      const draft = getUnsavedDraft();
-      if (draft) {
-        setUnsavedDraft(draft);
-      }
+    // If selected team is not set, set default first team
+    if (!selectedTeam && loadedTeams.length > 0) {
+      setSelectedTeam(loadedTeams[0]);
     }
-    init();
+  };
+
+  useEffect(() => {
+    reloadData();
+
+    // Listen to real-time broadcast channel from Admin/User tabs
+    const handleBroadcast = () => {
+      reloadData();
+    };
+
+    syncBroadcastChannel?.addEventListener('message', handleBroadcast);
+    return () => {
+      syncBroadcastChannel?.removeEventListener('message', handleBroadcast);
+    };
   }, []);
 
   // Update last saved timestamp
@@ -223,25 +280,32 @@ export function App() {
     }
   };
 
-  // Handle Create Location Excel File
-  const handleCreateLocationWorkbook = (locationName: string) => {
-    const newWb = createNewLocationWorkbook(locationName);
+  // -------------------------------------------------------------
+  // Location Excel Creation (Dual Sheets: inventory + bill)
+  // -------------------------------------------------------------
+  const handleCreateLocationWorkbook = async (locationName: string) => {
+    const teamId = selectedTeam ? selectedTeam.id : (teams[0]?.id || 'team-dolvan-maintenance');
+    const newWb = createNewLocationWorkbookWithDualSheets(locationName, teamId);
     const updated = [...workbooks, newWb];
     setWorkbooks(updated);
     setActiveLocationId(newWb.locationId);
-    setActiveSheetName('Performas');
-    saveWorkbookToStorage(newWb);
+    setActiveSheetName('inventory');
+    await saveWorkbookToStorage(newWb);
 
-    // Initial blank performa starting at Sr No. 1
-    const nextId = getNextPerformaId([], newWb.locationName);
-    const fresh = createBlankPerforma(nextId, '');
-    setCurrentPerforma(fresh);
-    setOriginalEditingId(null);
-    initHistory(fresh);
+    // Initial performa starts with sample data row
+    const sample = newWb.sheets['inventory']?.performas[0] || createBlankPerforma('DOL-001', locationName);
+    setCurrentPerforma(sample);
+    setOriginalEditingId(sample.id);
+    initHistory(sample);
     setIsCreateLocationModalOpen(false);
+    setIsWorkbookOpen(true);
     setMainViewTab('form');
-    showNotification(`Excel file "${newWb.workbookName}" created! Entry starts at Sr No. 1`);
+    showNotification(`Excel file "${newWb.workbookName}" created with 2 sheets: inventory & bill!`);
   };
+
+  // -------------------------------------------------------------
+  // Performa CRUD Operations
+  // -------------------------------------------------------------
 
   // Save current Performa record into dataset
   const saveCurrentPerformaInternal = (performaToSave: PerformaRecord): boolean => {
@@ -278,10 +342,10 @@ export function App() {
     };
 
     if (existingIndex >= 0) {
-      // Retain original position / row in the Excel dataset for edited records!
+      // Retain original row position for edited records
       nextPerformas[existingIndex] = recordToPersist;
     } else {
-      // Genuine NEW records MUST ALWAYS BE APPENDED TO THE END!
+      // Append new records to the end
       nextPerformas.push(recordToPersist);
     }
 
@@ -323,13 +387,11 @@ export function App() {
     }
   };
 
-  // Action: Save & Add Another (Multi-Performa Continuous Data Entry Workflow)
+  // Action: Save & Add Another (Continuous Entry)
   const handleSaveAndAddAnother = () => {
     const success = saveCurrentPerformaInternal(currentPerforma);
     if (!success) return;
 
-    // Determine the next continuous Performa ID
-    // System inspects ALL existing records (including the one just saved)
     const updatedPerformas = [...activePerformas];
     const existingIndex = originalEditingId 
       ? updatedPerformas.findIndex(p => p.id.trim().toLowerCase() === originalEditingId.trim().toLowerCase())
@@ -342,10 +404,8 @@ export function App() {
     }
 
     const nextId = getNextPerformaId(updatedPerformas, activeWorkbook.locationName);
-
-    // Create fresh blank performa with next ID, all 0, all No
     const freshPerforma = createBlankPerforma(nextId, currentPerforma.location || '');
-    freshPerforma.date = currentPerforma.date; // keep same date convenience
+    freshPerforma.date = currentPerforma.date;
 
     setCurrentPerforma(freshPerforma);
     setOriginalEditingId(null);
@@ -355,7 +415,7 @@ export function App() {
     showNotification(`Performa ${currentPerforma.id} saved! Now entering ${nextId}`, 'info');
   };
 
-  // Action: + Add New Performa (from top bar, table, or drawer)
+  // Action: + Add New Performa
   const handleStartNewPerforma = () => {
     if (!activeWorkbook) return;
     const nextId = getNextPerformaId(activePerformas, activeWorkbook.locationName);
@@ -386,7 +446,7 @@ export function App() {
   // Delete performa with confirmation
   const handleDeletePerforma = (idToDelete?: string) => {
     const targetId = idToDelete || currentPerforma.id;
-    if (!window.confirm(`Are you sure you want to delete Performa ${targetId}? Existing IDs will NOT be renamed.`)) {
+    if (!window.confirm(`Are you sure you want to delete Performa ${targetId}?`)) {
       return;
     }
 
@@ -421,7 +481,35 @@ export function App() {
     showNotification(`Deleted Performa ${targetId}`, 'info');
   };
 
-  // Navigation between performas [< Prev] [Next >]
+  // Update Bill Sheet
+  const handleUpdateBillSheet = (updatedBill: BillSheetDefinition) => {
+    if (!activeWorkbook) return;
+    const updatedSheets = {
+      ...activeWorkbook.sheets,
+      'bill': {
+        name: 'bill',
+        type: 'bill' as const,
+        performas: [],
+        isCompatible: true,
+        rawRowsCount: updatedBill.items.length,
+        billData: updatedBill
+      }
+    };
+
+    const updatedWorkbook: LocationWorkbook = {
+      ...activeWorkbook,
+      sheets: updatedSheets,
+      lastModified: new Date().toISOString()
+    };
+
+    const updatedWorkbooks = workbooks.map(w => 
+      w.locationId === updatedWorkbook.locationId ? updatedWorkbook : w
+    );
+    setWorkbooks(updatedWorkbooks);
+    saveWorkbookToStorage(updatedWorkbook);
+  };
+
+  // Navigation between performas
   const currentIndex = activePerformas.findIndex(p => p.id === currentPerforma.id);
   const canGoPrev = currentIndex > 0 || (currentIndex === -1 && activePerformas.length > 0);
 
@@ -429,10 +517,7 @@ export function App() {
     if (currentIndex > 0) {
       handleSelectPerforma(activePerformas[currentIndex - 1].id);
     } else if (currentIndex === -1 && activePerformas.length > 0) {
-      // Currently on an unsaved new performa, navigate to the latest saved record
       handleSelectPerforma(activePerformas[activePerformas.length - 1].id);
-    } else if (currentIndex === 0) {
-      showNotification('Already at the first record', 'info');
     }
   };
 
@@ -440,738 +525,347 @@ export function App() {
     if (currentIndex >= 0 && currentIndex < activePerformas.length - 1) {
       handleSelectPerforma(activePerformas[currentIndex + 1].id);
     } else {
-      // At the end or on latest: start next continuous record
       handleStartNewPerforma();
     }
   };
 
-  // Location selector change
-  const handleLocationChange = (locId: string) => {
-    const found = workbooks.find(w => w.locationId === locId);
-    if (found) {
-      setActiveLocationId(found.locationId);
-      const sheetName = found.activeSheetName || Object.keys(found.sheets)[0] || 'Performas';
-      setActiveSheetName(sheetName);
-
-      const performas = found.sheets[sheetName]?.performas || [];
-      const nextId = getNextPerformaId(performas, found.locationName);
-      const fresh = createBlankPerforma(nextId, '');
-      setCurrentPerforma(fresh);
-      setOriginalEditingId(null);
-      setDuplicateError(null);
-      initHistory(fresh);
-      setMainViewTab('form');
-      showNotification(`Opened ${found.workbookName}. Next entry starts at Sr No. ${performas.length + 1} (${nextId})`);
-    }
-  };
-
-  // Sheet selector change
-  const handleSheetChange = (sheetName: string) => {
-    setActiveSheetName(sheetName);
-    const sheet = activeWorkbook.sheets[sheetName];
-    const performas = sheet?.performas || [];
-    const nextId = getNextPerformaId(performas, activeWorkbook.locationName);
-    const fresh = createBlankPerforma(nextId, '');
-    setCurrentPerforma(fresh);
-    setOriginalEditingId(null);
-    initHistory(fresh);
-    showNotification(`Switched to sheet "${sheetName}". Next entry starts at Sr No. ${performas.length + 1} (${nextId})`);
-  };
-
-  // Excel File Upload & Analysis
-  const handleFileUpload = async (file: File) => {
-    try {
-      setUploadedFileName(file.name);
-      setUploadedFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
-
-      const parsed = await parseUploadedExcel(file);
-      setPendingParsedWorkbook(parsed.workbook);
-
-      // Check sheets
-      const defaultSheet = parsed.sheetNames.includes('Performas') 
-        ? 'Performas' 
-        : parsed.sheetNames[0];
-
-      // Analyze sheet for existing vs new performas
-      const summary = analyzeSheetForPerformas(
-        parsed.workbook,
-        defaultSheet,
-        activePerformas,
-        activeWorkbook.locationName
-      );
-      summary.workbookName = file.name;
-
-      setImportSummary(summary);
-    } catch (err) {
-      alert('Error reading Excel file: ' + (err as Error).message);
-    }
-  };
-
-  // Apply Import: Import New Only
-  const handleImportNewOnly = () => {
-    if (!importSummary) return;
-
-    const newPerformas = importSummary.parsedPerformas.filter(p => 
-      importSummary.newIds.includes(p.id)
-    );
-
-    // Append new records to the end of existing dataset!
-    const combined = [...activePerformas, ...newPerformas];
-
-    const updatedWorkbook: LocationWorkbook = {
-      ...activeWorkbook,
-      sheets: {
-        ...activeWorkbook.sheets,
-        [activeSheetName]: {
-          ...activeSheet,
-          performas: combined,
-          rawRowsCount: combined.length
-        }
-      },
-      lastModified: new Date().toISOString()
-    };
-
-    const updatedWorkbooks = workbooks.map(w => 
-      w.locationId === updatedWorkbook.locationId ? updatedWorkbook : w
-    );
-
-    setWorkbooks(updatedWorkbooks);
-    saveWorkbookToStorage(updatedWorkbook);
-    setImportSummary(null);
-
-    // Setup next entry after the last imported record
-    const nextId = getNextPerformaId(combined, activeWorkbook.locationName);
-    const fresh = createBlankPerforma(nextId, '');
-    setCurrentPerforma(fresh);
-    setOriginalEditingId(null);
-    initHistory(fresh);
-
-    showNotification(`Imported ${newPerformas.length} new records! Next starts at Sr No. ${combined.length + 1}`);
-  };
-
-  // Apply Import: Update Existing + Add New
-  const handleUpdateExistingAndAddNew = () => {
-    if (!importSummary) return;
-
-    const updatedList = [...activePerformas];
-
-    importSummary.parsedPerformas.forEach(incoming => {
-      const idx = updatedList.findIndex(p => p.id.trim().toUpperCase() === incoming.id.trim().toUpperCase());
-      if (idx >= 0) {
-        // Update in-place to retain original sequence
-        updatedList[idx] = incoming;
-      } else {
-        // Append genuine new record to the end
-        updatedList.push(incoming);
-      }
-    });
-
-    const updatedWorkbook: LocationWorkbook = {
-      ...activeWorkbook,
-      sheets: {
-        ...activeWorkbook.sheets,
-        [activeSheetName]: {
-          ...activeSheet,
-          performas: updatedList,
-          rawRowsCount: updatedList.length
-        }
-      },
-      lastModified: new Date().toISOString()
-    };
-
-    const updatedWorkbooks = workbooks.map(w => 
-      w.locationId === updatedWorkbook.locationId ? updatedWorkbook : w
-    );
-
-    setWorkbooks(updatedWorkbooks);
-    saveWorkbookToStorage(updatedWorkbook);
-    setImportSummary(null);
-
-    // Setup next entry after the last record
-    const nextId = getNextPerformaId(updatedList, activeWorkbook.locationName);
-    const fresh = createBlankPerforma(nextId, '');
-    setCurrentPerforma(fresh);
-    setOriginalEditingId(null);
-    initHistory(fresh);
-
-    showNotification(`Merged ${importSummary.parsedPerformas.length} records! Next starts at Sr No. ${updatedList.length + 1}`);
-  };
-
-  // Export Excel workbook (Using DOLVAN INVENTERY.xlsx Sheet1 Reference Master Format)
-  const handleExportExcel = () => {
-    if (!activeWorkbook) return;
-
-    // If active sheet has 0 records saved, but user is currently filling a performa, save it first
-    if (activePerformas.length === 0 && currentPerforma && currentPerforma.id) {
-      saveCurrentPerformaInternal(currentPerforma);
-    }
-
-    setIsExportReferenceModalOpen(true);
-  };
-
-  // Download Sample Excel
-  const handleDownloadSample = () => {
-    downloadSampleExcel(activeWorkbook?.locationName || 'Ahmedabad');
-    showNotification('Sample Excel downloaded!');
-  };
-
-  // Draft recovery actions
-  const handleContinueDraft = () => {
-    if (unsavedDraft) {
-      setCurrentPerforma(unsavedDraft.performa);
-      setOriginalEditingId(unsavedDraft.performa.id);
-      setActiveSheetName(unsavedDraft.sheetName);
-      initHistory(unsavedDraft.performa);
-      setUnsavedDraft(null);
-      showNotification('Restored unsaved draft!');
-    }
-  };
-
-  const handleDiscardDraft = () => {
-    clearUnsavedDraft();
-    setUnsavedDraft(null);
-    showNotification('Draft discarded.');
-  };
-
-  // Print / PDF action
+  // Print
   const handlePrint = () => {
-    window.print();
+    setViewMode('print');
+    setTimeout(() => {
+      window.print();
+    }, 250);
   };
 
-  // Check if current performa is an existing saved record
-  const isExistingRecord = activePerformas.some(
-    p => p.id.trim().toLowerCase() === (originalEditingId || currentPerforma.id).trim().toLowerCase()
-  );
-
-  return (
-    <div className="min-h-screen flex flex-col bg-[#edf2f7] text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900">
-      {/* Hidden file input for reliable toolbar Excel upload */}
-      <input
-        ref={toolbarFileInputRef}
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        onChange={(e) => {
-          if (e.target.files && e.target.files[0]) {
-            handleFileUpload(e.target.files[0]);
+  // -------------------------------------------------------------
+  // ROUTE 1: ADMIN PANEL (/admin)
+  // -------------------------------------------------------------
+  if (currentRoute === 'admin') {
+    return (
+      <AdminPanel
+        onNavigateToUser={(teamId) => {
+          navigateTo('/');
+          if (teamId) {
+            const found = teams.find(t => t.id === teamId);
+            if (found) {
+              setSelectedTeam(found);
+              setIsWorkbookOpen(false);
+            }
           }
         }}
-        className="hidden"
       />
+    );
+  }
 
-      {/* Draft Recovery Notification Banner */}
-      <DraftRecoveryBanner
-        draft={unsavedDraft}
-        onContinueEditing={handleContinueDraft}
-        onDiscardDraft={handleDiscardDraft}
-      />
+  // -------------------------------------------------------------
+  // ROUTE 2: USER DASHBOARD (/) - TEAM & EXCEL SELECTION
+  // -------------------------------------------------------------
+  if (!isWorkbookOpen) {
+    return (
+      <>
+        <UserDashboard
+          teams={teams}
+          workbooks={workbooks}
+          selectedTeam={selectedTeam}
+          onSelectTeam={(team) => {
+            setSelectedTeam(team);
+          }}
+          onClearSelectedTeam={() => {
+            setSelectedTeam(null);
+          }}
+          onOpenWorkbook={(wb) => {
+            setActiveLocationId(wb.locationId);
+            const targetSheet = wb.sheets['inventory'] ? 'inventory' : Object.keys(wb.sheets)[0];
+            setActiveSheetName(targetSheet);
+            setIsWorkbookOpen(true);
+            setMainViewTab('form');
 
-      {/* Floating Notification */}
-      {notification && (
-        <div className="fixed top-4 right-4 z-50 animate-bounce">
-          <div className={`px-4 py-2.5 rounded-xl shadow-xl border text-xs sm:text-sm font-semibold flex items-center space-x-2 ${
-            notification.type === 'error'
-              ? 'bg-rose-600 text-white border-rose-700'
-              : notification.type === 'info'
-              ? 'bg-sky-600 text-white border-sky-700'
-              : 'bg-emerald-600 text-white border-emerald-700'
-          }`}>
-            <span>{notification.message}</span>
-          </div>
-        </div>
-      )}
+            const sheet = wb.sheets[targetSheet];
+            const performas = sheet?.performas || [];
+            if (performas.length > 0) {
+              setCurrentPerforma(performas[0]);
+              setOriginalEditingId(performas[0].id);
+              initHistory(performas[0]);
+            } else {
+              const nextId = getNextPerformaId([], wb.locationName);
+              const blank = createBlankPerforma(nextId, '');
+              setCurrentPerforma(blank);
+              setOriginalEditingId(null);
+              initHistory(blank);
+            }
+          }}
+          onCreateLocationClick={() => setIsCreateLocationModalOpen(true)}
+          onDeleteWorkbook={async (locId) => {
+            await deleteWorkbookFromStorage(locId);
+            const reloaded = await loadWorkbooksFromStorage();
+            setWorkbooks(reloaded);
+            showNotification('Location Excel deleted.');
+          }}
+          onNavigateToAdmin={() => navigateTo('/admin')}
+        />
 
+        {/* Create Location Modal */}
+        <CreateLocationModal
+          isOpen={isCreateLocationModalOpen}
+          onClose={() => setIsCreateLocationModalOpen(false)}
+          onCreateLocation={handleCreateLocationWorkbook}
+          canClose={true}
+        />
+      </>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // ROUTE 3: LOCATION EXCEL WORKSPACE (Performa CRUD + Dual Sheets)
+  // -------------------------------------------------------------
+  const isBillSheet = activeSheetName === 'bill';
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
       {/* Top Application Header */}
-      <header className="bg-[#1e3a8a] text-white shadow-md print:hidden">
-        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
-          {/* Logo & Title */}
-          <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-500/30 border border-blue-400/40 text-blue-200 flex items-center justify-center font-bold shadow-inner flex-shrink-0">
-              <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
+      <header className="bg-slate-800 border-b border-slate-700 px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 shadow-md">
+        {/* Left: Back to Team + Location & Workbook Info */}
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <button
+            onClick={() => setIsWorkbookOpen(false)}
+            className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white border border-slate-600 transition-colors flex items-center gap-1 text-xs font-semibold"
+            title="Back to All Excels"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Back</span>
+          </button>
+
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center font-bold text-white shadow-sm">
+              <Zap className="w-4 h-4" />
             </div>
-            <div className="min-w-0">
+            <div>
               <div className="flex items-center space-x-2">
-                <h1 className="font-extrabold text-sm sm:text-base md:text-lg tracking-tight leading-tight truncate">
-                  Transformer Maintenance Performa
-                </h1>
-                <span className="hidden md:inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-700/80 text-blue-200 uppercase tracking-widest border border-blue-600">
-                  Continuous Entry
+                <span className="font-extrabold text-sm sm:text-base text-white tracking-tight">
+                  {activeWorkbook?.locationName || 'DOLVAN'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {activeWorkbook?.workbookName}
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-blue-200/80 hidden xs:block truncate">
-                Excel Import • Edit • Preview • Print / PDF • Export Excel
+              <p className="text-[10px] text-slate-400">
+                Team: <strong className="text-emerald-400">{selectedTeam?.name || 'Dolvan Maintenance Team'}</strong>
               </p>
             </div>
           </div>
+        </div>
 
-          {/* Right Controls: PWA Install, Create Location, Profile Avatar, A4 Document Badge */}
-          <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
-            {/* PWA Install Button */}
-            <PWAInstallButton />
+        {/* Center: Dual Sheet Switcher: inventory vs bill */}
+        <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700">
+          <button
+            onClick={() => {
+              setActiveSheetName('inventory');
+              setMainViewTab('form');
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeSheetName === 'inventory' || activeSheetName === 'Performas'
+                ? 'bg-emerald-600 text-white shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Sheet 1: inventory</span>
+          </button>
 
-            {/* Create Location Excel */}
-            <button
-              type="button"
-              onClick={() => setIsCreateLocationModalOpen(true)}
-              className="flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow transition-all cursor-pointer"
-            >
-              <FolderPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">+ New Location Excel</span>
-              <span className="sm:hidden">+ Location</span>
-            </button>
+          <button
+            onClick={() => {
+              setActiveSheetName('bill');
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeSheetName === 'bill'
+                ? 'bg-cyan-600 text-white shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Sheet 2: bill</span>
+          </button>
+        </div>
 
-            {/* Engineer Profile Avatar ("Dk" from reference photo) */}
-            <button
-              type="button"
-              onClick={() => setIsProfileModalOpen(true)}
-              className="flex items-center space-x-1.5 sm:space-x-2 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/60 rounded-xl px-2 sm:px-2.5 py-1 text-xs text-blue-100 transition-all cursor-pointer group shadow-inner"
-              title="Field Engineer Profile (Dk)"
-            >
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-slate-900 border border-amber-400 flex items-center justify-center overflow-hidden shadow-xs relative">
-                {localStorage.getItem('performa_engineer_photo_v1') ? (
-                  <img 
-                    src={localStorage.getItem('performa_engineer_photo_v1')!} 
-                    alt="Dk" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-amber-400 font-serif font-black italic text-xs sm:text-sm">Dk</span>
-                )}
-              </div>
-              <div className="text-left hidden md:block">
-                <div className="font-bold text-[11px] leading-tight text-white flex items-center space-x-1">
-                  <span>{localStorage.getItem('performa_engineer_name_v1') || 'Dk'}</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                </div>
-                <div className="text-[9px] text-blue-300 font-mono">Lead Engineer</div>
-              </div>
-            </button>
+        {/* Right: Actions */}
+        <div className="flex items-center space-x-2">
+          {/* Supabase SQL Database Config */}
+          <button
+            type="button"
+            onClick={() => setIsSupabaseModalOpen(true)}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-emerald-400 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-600"
+            title="Configure Supabase SQL connection and open permissions"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Supabase</span>
+          </button>
 
-            {/* A4 Document Badge */}
-            <div className="hidden xl:flex items-center space-x-2 bg-blue-950/60 border border-blue-700/60 rounded-xl px-3 py-1.5 text-xs text-blue-100">
-              <FileText className="w-4 h-4 text-blue-300" />
-              <div>
-                <div className="font-bold text-[11px] leading-tight">A4 Document</div>
-                <div className="text-[10px] text-blue-300 font-mono">210mm × 297mm</div>
-              </div>
-            </div>
-          </div>
+          {/* Dual-Sheet Excel Download */}
+          <button
+            type="button"
+            onClick={() => {
+              if (activeWorkbook) {
+                exportDualSheetLocationExcel(activeWorkbook);
+                showNotification(`Downloaded ${activeWorkbook.locationName}_INVENTORY_BILL.xlsx`);
+              }
+            }}
+            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition-colors"
+            title="Download Excel with both sheets"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Export Excel</span>
+          </button>
+
+          {/* Print */}
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Print</span>
+          </button>
         </div>
       </header>
 
-      {/* Action Toolbar */}
-      <nav className="bg-white border-b border-slate-200 shadow-xs sticky top-0 z-30 print:hidden">
-        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
-          {/* Tier 1: View Tab Switchers */}
-          <div className="flex items-center space-x-2 w-full md:w-auto">
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 w-full md:w-auto">
-              <button
-                type="button"
-                onClick={() => setMainViewTab('form')}
-                className={`flex-1 md:flex-initial flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                  mainViewTab === 'form'
-                    ? 'bg-white text-blue-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Performa Form</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setMainViewTab('table')}
-                className={`flex-1 md:flex-initial flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                  mainViewTab === 'table'
-                    ? 'bg-white text-emerald-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Table className="w-3.5 h-3.5" />
-                <span>Records ({activePerformas.length})</span>
-              </button>
-
-              {/* Mobile files/import tab */}
-              <button
-                type="button"
-                onClick={() => setMainViewTab('files')}
-                className={`flex-1 md:flex-initial lg:hidden flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                  mainViewTab === 'files'
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <UploadCloud className="w-3.5 h-3.5" />
-                <span>Files</span>
-              </button>
-            </div>
+      {/* Main Workspace Area */}
+      <main className="flex-1 overflow-y-auto p-3 sm:p-6">
+        {/* Notification Toast */}
+        {notification && (
+          <div className="fixed top-16 right-4 z-50 bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-2xl flex items-center gap-2">
+            <FileCheck className="w-4 h-4" />
+            <span>{notification.message}</span>
           </div>
+        )}
 
-          {/* Tier 2: Scrollable / Wrapped Action Buttons */}
-          <div className="flex items-center space-x-1.5 sm:space-x-2 overflow-x-auto no-scrollbar py-0.5">
-            <button
-              type="button"
-              onClick={() => toolbarFileInputRef.current?.click()}
-              className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>Upload</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleStartNewPerforma}
-              className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 text-blue-600" />
-              <span>New</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSaveAndClose}
-              className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
-            >
-              <Save className="w-3.5 h-3.5 text-slate-500" />
-              <span>Save</span>
-            </button>
-
-            <div className="h-4 w-px bg-slate-200 mx-0.5 flex-shrink-0"></div>
-
-            <button
-              type="button"
-              disabled={historyIndex <= 0}
-              onClick={handleUndo}
-              className={`p-1.5 rounded-lg border text-xs transition-colors flex-shrink-0 ${
-                historyIndex > 0
-                  ? 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer'
-                  : 'border-slate-200 text-slate-300 cursor-not-allowed'
-              }`}
-              title="Undo change"
-            >
-              <Undo2 className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              type="button"
-              disabled={historyIndex >= history.length - 1}
-              onClick={handleRedo}
-              className={`p-1.5 rounded-lg border text-xs transition-colors flex-shrink-0 ${
-                historyIndex < history.length - 1
-                  ? 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer'
-                  : 'border-slate-200 text-slate-300 cursor-not-allowed'
-              }`}
-              title="Redo change"
-            >
-              <Redo2 className="w-3.5 h-3.5" />
-            </button>
-
-            <div className="h-4 w-px bg-slate-200 mx-0.5 flex-shrink-0"></div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setMainViewTab('form');
-                setViewMode(viewMode === 'preview' ? 'edit' : 'preview');
-              }}
-              className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
-                viewMode === 'preview' && mainViewTab === 'form'
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
-              }`}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>{viewMode === 'preview' ? 'Edit Mode' : 'Preview'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5 text-slate-600" />
-              <span>Print</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="flex-shrink-0 flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Export</span>
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Sub-Header: Location & Sheet Selector + Continuous Sequence Navigator */}
-      <div className="bg-slate-100 border-b border-slate-200 px-3 sm:px-4 py-2 print:hidden">
-        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-          {/* Location & Workbook Selection */}
-          <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto">
-            <div className="flex-1 sm:flex-initial flex items-center space-x-1 font-semibold text-slate-700 min-w-0">
-              <MapPin className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-              <span className="hidden md:inline">Location:</span>
-              <select
-                value={activeLocationId}
-                onChange={(e) => handleLocationChange(e.target.value)}
-                className="w-full sm:w-auto bg-white border border-slate-300 rounded px-2 py-1 font-bold text-slate-800 text-xs outline-none cursor-pointer truncate"
-              >
-                {workbooks.map(w => (
-                  <option key={w.locationId} value={w.locationId}>
-                    {w.locationName} ({w.workbookName})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex-1 sm:flex-initial flex items-center space-x-1 font-semibold text-slate-700 min-w-0">
-              <Layers className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
-              <span className="hidden md:inline">Sheet:</span>
-              <select
-                value={activeSheetName}
-                onChange={(e) => handleSheetChange(e.target.value)}
-                className="w-full sm:w-auto bg-white border border-slate-300 rounded px-2 py-1 font-bold text-indigo-800 text-xs outline-none cursor-pointer truncate"
-              >
-                {activeWorkbook && Object.keys(activeWorkbook.sheets).map(sheet => (
-                  <option key={sheet} value={sheet}>
-                    {sheet}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Sequential Navigator: [< Prev] [Next >] and [+ Add New Performa] */}
-          <div className="flex items-center justify-between sm:justify-end space-x-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-200">
-            <div className="flex items-center space-x-1 text-slate-500 font-mono text-[11px]">
-              <span className="hidden xs:inline">Sequence:</span>
-              <span className="font-bold text-slate-800">
-                {currentIndex >= 0 
-                  ? `Sr ${currentIndex + 1} of ${activePerformas.length}` 
-                  : `Next: Sr ${activePerformas.length + 1}`}
-              </span>
-            </div>
-
-            <div className="flex items-center space-x-1.5">
-              <button
-                type="button"
-                disabled={!canGoPrev}
-                onClick={handlePrevPerforma}
-                className={`p-1.5 sm:p-1 rounded border text-xs ${
-                  canGoPrev 
-                    ? 'bg-white text-slate-700 hover:bg-slate-50 border-slate-300 cursor-pointer' 
-                    : 'text-slate-300 border-slate-200 cursor-not-allowed'
-                }`}
-                title="Previous Performa"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleNextPerforma}
-                className="p-1.5 sm:p-1 rounded border bg-white text-slate-700 hover:bg-slate-50 border-slate-300 text-xs cursor-pointer"
-                title={currentIndex < activePerformas.length - 1 ? 'Next Performa' : 'Add Next Performa'}
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleStartNewPerforma}
-                className="flex items-center space-x-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
-              >
-                <Plus className="w-3 h-3" />
-                <span>+ Add Sr {activePerformas.length + 1}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Workspace Layout */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto p-2.5 sm:p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
-        {/* Left Column: Excel Import & Tools Sidebar */}
-        <aside className={`lg:col-span-4 xl:col-span-3 print:hidden ${
-          mainViewTab === 'files' ? 'block w-full' : 'hidden lg:block'
-        }`}>
-          <ExcelImportSidebar
-            onFileUpload={handleFileUpload}
-            uploadedFileName={uploadedFileName}
-            uploadedFileSize={uploadedFileSize}
-            onClearUploadedFile={() => {
-              setUploadedFileName(null);
-              setPendingParsedWorkbook(null);
-            }}
-            availableSheets={activeWorkbook ? Object.keys(activeWorkbook.sheets) : ['Performas']}
-            activeSheetName={activeSheetName}
-            onSelectSheet={handleSheetChange}
-            onDownloadSample={handleDownloadSample}
-            isSheetCompatible={activeSheet?.isCompatible ?? true}
-            totalPerformasCount={activePerformas.length}
-            onViewTable={() => setMainViewTab('table')}
-            onOpenNewPerforma={() => {
-              handleStartNewPerforma();
-              setMainViewTab('form');
-            }}
+        {isBillSheet ? (
+          // Sheet 2: Bill Viewer
+          <BillSheetViewer
+            billData={activeWorkbook?.sheets['bill']?.billData || createDefaultBillSheet(activeWorkbook?.locationName || 'Location')}
+            locationName={activeWorkbook?.locationName || 'Location'}
+            onUpdateBill={handleUpdateBillSheet}
           />
-        </aside>
+        ) : (
+          // Sheet 1: Inventory Performa CRUD & Excel Data Table
+          <div className="max-w-6xl mx-auto space-y-4">
+            {/* View Mode & CRUD Action Bar */}
+            <div className="bg-slate-800/90 border border-slate-700 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+              {/* Left: View Mode Toggle */}
+              <div className="flex items-center space-x-1 bg-slate-900 p-1 rounded-lg border border-slate-700/80">
+                <button
+                  onClick={() => setMainViewTab('form')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    mainViewTab === 'form'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>A4 Performa Form</span>
+                </button>
+                <button
+                  onClick={() => setMainViewTab('table')}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    mainViewTab === 'table'
+                      ? 'bg-emerald-600 text-white shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Table className="w-3.5 h-3.5" />
+                  <span>Excel Sheet Table ({activePerformas.length})</span>
+                </button>
+              </div>
 
-        {/* Center / Right Column: Form OR Excel Data Table */}
-        <section className={`lg:col-span-8 xl:col-span-9 flex flex-col items-center w-full ${
-          mainViewTab === 'files' ? 'hidden lg:flex' : 'flex'
-        }`}>
-          {mainViewTab === 'table' ? (
-            <ExcelDataTable
-              workbookName={activeWorkbook?.workbookName || 'Ahmedabad.xlsx'}
-              sheetName={activeSheetName}
-              performas={activePerformas}
-              onEditPerforma={(id) => {
-                handleSelectPerforma(id);
-                setMainViewTab('form');
-              }}
-              onDeletePerforma={handleDeletePerforma}
-              onAddNewPerforma={() => {
-                handleStartNewPerforma();
-                setMainViewTab('form');
-              }}
-              onExportExcel={handleExportExcel}
-            />
-          ) : (
-            <A4PerformaDocument
-              performa={currentPerforma}
-              onChange={handlePerformaChange}
-              onSaveAndAddAnother={handleSaveAndAddAnother}
-              onSaveAndClose={handleSaveAndClose}
-              onDelete={() => handleDeletePerforma()}
-              isExisting={isExistingRecord}
-              duplicateError={duplicateError}
-              onClearDuplicateError={() => setDuplicateError(null)}
-              viewMode={viewMode}
-            />
-          )}
-        </section>
+              {/* Right: CRUD Actions */}
+              <div className="flex items-center space-x-2">
+                {/* + Add Entry Button */}
+                <button
+                  onClick={handleStartNewPerforma}
+                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1.5 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Add Entry</span>
+                </button>
+
+                {/* Save Current */}
+                {mainViewTab === 'form' && (
+                  <>
+                    <button
+                      onClick={handleSaveAndClose}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1.5 transition-all"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save</span>
+                    </button>
+
+                    {/* Delete Entry (if editing) */}
+                    {originalEditingId && (
+                      <button
+                        onClick={() => handleDeletePerforma(originalEditingId)}
+                        className="px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+                        title="Delete this record"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Remove</span>
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Content Rendering: Form or Table */}
+            {mainViewTab === 'form' ? (
+              <A4PerformaDocument
+                performa={currentPerforma}
+                onChange={handlePerformaChange}
+                onSaveAndAddAnother={handleSaveAndAddAnother}
+                onSaveAndClose={handleSaveAndClose}
+                onDelete={() => handleDeletePerforma(currentPerforma.id)}
+                isExisting={!!originalEditingId}
+                duplicateError={duplicateError}
+                onClearDuplicateError={() => setDuplicateError(null)}
+                viewMode={viewMode}
+              />
+            ) : (
+              <ExcelDataTable
+                workbookName={activeWorkbook?.workbookName || 'Workbook.xlsx'}
+                sheetName="inventory (DOLVAN)"
+                performas={activePerformas}
+                onEditPerforma={(id) => {
+                  handleSelectPerforma(id);
+                }}
+                onDeletePerforma={(id) => {
+                  handleDeletePerforma(id);
+                }}
+                onAddNewPerforma={handleStartNewPerforma}
+                onExportExcel={() => {
+                  if (activeWorkbook) {
+                    exportDualSheetLocationExcel(activeWorkbook);
+                  }
+                }}
+              />
+            )}
+          </div>
+        )}
       </main>
 
-      {/* Bottom Footer Status Bar */}
-      <footer className="bg-white border-t border-slate-200 py-2.5 px-4 text-xs text-slate-600 print:hidden mt-auto">
-        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="font-bold text-slate-800">Ready</span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-500">Last saved: {lastSavedTime}</span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-500">
-              Active: <strong className="text-blue-700 font-mono">{currentPerforma.id}</strong> in {activeSheetName}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-1.5">
-            <span className="text-slate-400 font-medium mr-1">View mode:</span>
-            <button
-              type="button"
-              onClick={() => { setViewMode('edit'); setMainViewTab('form'); }}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                viewMode === 'edit' && mainViewTab === 'form'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              Edit Form
-            </button>
-            <button
-              type="button"
-              onClick={() => { setViewMode('preview'); setMainViewTab('form'); }}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                viewMode === 'preview' && mainViewTab === 'form'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              Preview A4
-            </button>
-            <button
-              type="button"
-              onClick={() => setMainViewTab('table')}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                mainViewTab === 'table'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              Excel Table
-            </button>
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-2.5 py-1 rounded text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-            >
-              Print
-            </button>
-          </div>
-        </div>
-      </footer>
-
-      {/* Performa Records Drawer */}
-      <PerformaListDrawer
-        isOpen={isRecordsDrawerOpen}
-        onClose={() => setIsRecordsDrawerOpen(false)}
-        performas={activePerformas}
-        activePerformaId={currentPerforma.id}
-        onSelectPerforma={handleSelectPerforma}
-        onAddNewPerforma={handleStartNewPerforma}
-        onDeletePerforma={handleDeletePerforma}
-        sheetName={activeSheetName}
-        locationName={activeWorkbook?.locationName || 'Ahmedabad'}
-      />
-
-      {/* Create Location Excel Modal */}
+      {/* Modals */}
       <CreateLocationModal
         isOpen={isCreateLocationModalOpen}
         onClose={() => setIsCreateLocationModalOpen(false)}
         onCreateLocation={handleCreateLocationWorkbook}
-        canClose={workbooks.length > 0}
+        canClose={true}
       />
 
-      {/* Excel Import Summary & Merge Modal */}
-      <ImportSummaryModal
-        summary={importSummary}
-        onClose={() => setImportSummary(null)}
-        onImportNewOnly={handleImportNewOnly}
-        onUpdateExistingAndAddNew={handleUpdateExistingAndAddNew}
-        isReimport={uploadedFileName?.includes('Sample') || false}
-      />
-
-      {/* Engineer Profile Modal (Dk Avatar & Info) */}
-      <EngineerProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        onOpenInstallModal={() => setIsInstallModalOpen(true)}
-        totalPerformasCount={activePerformas.length}
-        currentLocationName={activeWorkbook?.locationName || 'Ahmedabad'}
-      />
-
-      {/* Dedicated PWA Install Modal (Android, iPhone, Desktop) */}
-      <PWAInstallModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
-      />
-
-      {/* DOLVAN INVENTERY.xlsx Sheet1 Reference Master Export Modal */}
-      <ExportReferenceModal
-        isOpen={isExportReferenceModalOpen}
-        onClose={() => setIsExportReferenceModalOpen(false)}
-        performas={activePerformas.length > 0 ? activePerformas : (currentPerforma?.id ? [currentPerforma] : [])}
-        locationName={activeWorkbook?.locationName || 'Ahmedabad'}
-        workbookName={activeWorkbook?.workbookName || 'Ahmedabad.xlsx'}
-        onExportSuccess={(fileName) => {
-          showNotification(`Exported to "${fileName}" matching DOLVAN INVENTERY Sheet1!`);
-        }}
+      <SupabaseSettingsModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onConnectionChanged={reloadData}
       />
     </div>
   );
 }
 
 export default App;
+

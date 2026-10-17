@@ -1,14 +1,30 @@
 import { LocationWorkbook, PerformaRecord, createBlankPerforma } from '../types/performa';
+import { Team } from '../types/team';
+import { createDolvanSamplePerforma, createDefaultBillSheet } from './dolvanTemplate';
+import { 
+  fetchTeamsFromSupabase, 
+  upsertTeamSupabase, 
+  deleteTeamSupabase, 
+  fetchWorkbooksFromSupabase, 
+  upsertWorkbookSupabase, 
+  deleteWorkbookSupabase 
+} from './supabaseClient';
 
 const DB_NAME = 'PerformaDataEngineDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_WORKBOOKS = 'workbooks';
 const STORE_DRAFTS = 'drafts';
+const STORE_TEAMS = 'teams';
+
+// Real-time Cross-tab Sync
+export const syncBroadcastChannel = typeof window !== 'undefined' && 'BroadcastChannel' in window 
+  ? new BroadcastChannel('dgvcl_inventory_sync_channel')
+  : null;
 
 // IndexedDB Helper
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    if (!window.indexedDB) {
+    if (typeof window === 'undefined' || !window.indexedDB) {
       reject(new Error('IndexedDB not supported'));
       return;
     }
@@ -23,56 +39,242 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_DRAFTS)) {
         db.createObjectStore(STORE_DRAFTS, { keyPath: 'key' });
       }
+      if (!db.objectStoreNames.contains(STORE_TEAMS)) {
+        db.createObjectStore(STORE_TEAMS, { keyPath: 'id' });
+      }
     };
   });
 }
 
-// Create brand new blank Location Workbook
-export function createNewLocationWorkbook(locationName: string): LocationWorkbook {
+// -------------------------------------------------------------
+// Team Storage Management
+// -------------------------------------------------------------
+export function createDefaultTeams(): Team[] {
+  return [
+    {
+      id: 'team-dolvan-maintenance',
+      name: 'Dolvan Maintenance Team',
+      code: 'DLV-01',
+      division: 'VYARA',
+      subdivision: 'DOLVAN',
+      inChargeEngineer: {
+        name: 'Er. R. K. Patel',
+        designation: 'Deputy Executive Engineer',
+        contactNumber: '+91 98250 12345',
+        email: 'rkpatel@dgvcl.co.in'
+      },
+      members: ['Kishan Kumar', 'Ramesh Bhai', 'Pravin Solanki'],
+      locationExcelIds: ['dolvan'],
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: 'team-vyara-central',
+      name: 'Vyara Sub-Station Team',
+      code: 'VYR-02',
+      division: 'VYARA',
+      subdivision: 'VYARA RURAL',
+      inChargeEngineer: {
+        name: 'Er. M. S. Chaudhary',
+        designation: 'Junior Engineer (Testing)',
+        contactNumber: '+91 94270 67890',
+        email: 'mschaudhary@dgvcl.co.in'
+      },
+      members: ['Suresh Gamit', 'Bharat Vasava'],
+      locationExcelIds: ['kandha_konchal'],
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ];
+}
+
+export async function loadTeamsFromStorage(): Promise<Team[]> {
+  // First attempt to load from Supabase if connected
+  try {
+    const remoteTeams = await fetchTeamsFromSupabase();
+    if (remoteTeams && remoteTeams.length > 0) {
+      localStorage.setItem('dgvcl_teams_v1', JSON.stringify(remoteTeams));
+      return remoteTeams;
+    }
+  } catch {
+    // fallback to local
+  }
+
+  try {
+    const db = await openDatabase();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_TEAMS, 'readonly');
+      const store = tx.objectStore(STORE_TEAMS);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const results = req.result as Team[];
+        if (results && results.length > 0) {
+          resolve(results);
+        } else {
+          const local = localStorage.getItem('dgvcl_teams_v1');
+          if (local) {
+            try {
+              const parsed = JSON.parse(local);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                resolve(parsed);
+                return;
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+          const defaults = createDefaultTeams();
+          defaults.forEach(t => saveTeamToStorage(t));
+          resolve(defaults);
+        }
+      };
+      req.onerror = () => resolve(createDefaultTeams());
+    });
+  } catch (err) {
+    const local = localStorage.getItem('dgvcl_teams_v1');
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        // ignore
+      }
+    }
+    return createDefaultTeams();
+  }
+}
+
+export async function saveTeamToStorage(team: Team): Promise<void> {
+  // Save locally
+  try {
+    const all = await loadTeamsFromStorage();
+    const idx = all.findIndex(t => t.id === team.id);
+    if (idx >= 0) {
+      all[idx] = team;
+    } else {
+      all.push(team);
+    }
+    localStorage.setItem('dgvcl_teams_v1', JSON.stringify(all));
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const db = await openDatabase();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_TEAMS, 'readwrite');
+      const store = tx.objectStore(STORE_TEAMS);
+      const req = store.put(team);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    // handled in localStorage fallback
+  }
+
+  // Sync to Supabase in background
+  upsertTeamSupabase(team).catch(() => {});
+
+  syncBroadcastChannel?.postMessage({ type: 'TEAM_UPDATED', teamId: team.id });
+}
+
+export async function deleteTeamFromStorage(teamId: string): Promise<void> {
+  try {
+    const all = await loadTeamsFromStorage();
+    const filtered = all.filter(t => t.id !== teamId);
+    localStorage.setItem('dgvcl_teams_v1', JSON.stringify(filtered));
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const db = await openDatabase();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_TEAMS, 'readwrite');
+      const store = tx.objectStore(STORE_TEAMS);
+      const req = store.delete(teamId);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    // fallback
+  }
+
+  // Delete from Supabase in background
+  deleteTeamSupabase(teamId).catch(() => {});
+
+  syncBroadcastChannel?.postMessage({ type: 'TEAM_DELETED', teamId });
+}
+
+// -------------------------------------------------------------
+// Location Workbook Storage (Automatic 2 Sheets: inventory + bill)
+// -------------------------------------------------------------
+
+/**
+ * Creates brand new Location Workbook with 2 sheets:
+ * 1. 'inventory': exact DOLVAN INVENTERY layout with pre-populated sample row!
+ * 2. 'bill': billing calculation sheet
+ */
+export function createNewLocationWorkbookWithDualSheets(locationName: string, teamId: string = 'team-dolvan-maintenance'): LocationWorkbook {
   const cleanLoc = locationName.trim();
   const id = cleanLoc.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'loc';
+  const samplePerforma = createDolvanSamplePerforma(cleanLoc);
+  const defaultBill = createDefaultBillSheet(cleanLoc);
+
   return {
     locationId: id,
+    teamId,
     locationName: cleanLoc,
     workbookName: `${cleanLoc}.xlsx`,
-    activeSheetName: 'Performas',
+    activeSheetName: 'inventory',
     sheets: {
-      'Performas': {
-        name: 'Performas',
-        type: 'performas',
-        performas: [],
+      'inventory': {
+        name: 'inventory',
+        type: 'inventory',
+        performas: [samplePerforma],
         isCompatible: true,
-        rawRowsCount: 0
+        rawRowsCount: 1
       },
-      'Maintenance': {
-        name: 'Maintenance',
-        type: 'maintenance',
+      'bill': {
+        name: 'bill',
+        type: 'bill',
         performas: [],
         isCompatible: true,
-        rawRowsCount: 0
-      },
-      'Measurements': {
-        name: 'Measurements',
-        type: 'measurements',
-        performas: [],
-        isCompatible: true,
-        rawRowsCount: 0
+        rawRowsCount: defaultBill.items.length,
+        billData: defaultBill
       }
     },
     lastModified: new Date().toISOString()
   };
 }
 
-// Default initial workbook for initial launch
-export function createInitialWorkbook(locationName: string = 'Ahmedabad'): LocationWorkbook {
-  const wb = createNewLocationWorkbook(locationName);
-  return wb;
+// Initial seed workbook for initial launch
+export function createInitialWorkbook(locationName: string = 'Dolvan', teamId: string = 'team-dolvan-maintenance'): LocationWorkbook {
+  return createNewLocationWorkbookWithDualSheets(locationName, teamId);
+}
+
+// Legacy alias for compatibility
+export function createNewLocationWorkbook(locationName: string): LocationWorkbook {
+  return createNewLocationWorkbookWithDualSheets(locationName, 'team-dolvan-maintenance');
 }
 
 /**
  * Loads all workbooks from IndexedDB (with localStorage fallback).
  */
 export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
+  // First attempt to load from Supabase if connected
+  try {
+    const remoteWorkbooks = await fetchWorkbooksFromSupabase();
+    if (remoteWorkbooks && remoteWorkbooks.length > 0) {
+      localStorage.setItem('performa_workbooks_v2', JSON.stringify(remoteWorkbooks));
+      return remoteWorkbooks;
+    }
+  } catch {
+    // fallback
+  }
+
   try {
     const db = await openDatabase();
     return new Promise((resolve) => {
@@ -89,33 +291,35 @@ export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
           if (local) {
             try {
               const parsed = JSON.parse(local);
-              resolve(parsed);
-              return;
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                resolve(parsed);
+                return;
+              }
             } catch (e) {
               // ignore
             }
           }
-          // Seed with initial Ahmedabad workbook
-          const initial = [createInitialWorkbook('Ahmedabad')];
+          // Seed with initial Dolvan workbook
+          const initial = [createInitialWorkbook('Dolvan')];
           saveWorkbookToStorage(initial[0]);
           resolve(initial);
         }
       };
       req.onerror = () => {
-        resolve([createInitialWorkbook('Ahmedabad')]);
+        resolve([createInitialWorkbook('Dolvan')]);
       };
     });
   } catch (err) {
-    // LocalStorage fallback
     const local = localStorage.getItem('performa_workbooks_v2');
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {
         // ignore
       }
     }
-    return [createInitialWorkbook('Ahmedabad')];
+    return [createInitialWorkbook('Dolvan')];
   }
 }
 
@@ -123,7 +327,6 @@ export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
  * Saves a single workbook into IndexedDB and keeps localStorage in sync.
  */
 export async function saveWorkbookToStorage(workbook: LocationWorkbook): Promise<void> {
-  // Sync to localStorage
   try {
     const allWorkbooks = await loadWorkbooksFromStorage();
     const idx = allWorkbooks.findIndex(w => w.locationId === workbook.locationId);
@@ -139,7 +342,7 @@ export async function saveWorkbookToStorage(workbook: LocationWorkbook): Promise
 
   try {
     const db = await openDatabase();
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_WORKBOOKS, 'readwrite');
       const store = tx.objectStore(STORE_WORKBOOKS);
       const req = store.put(workbook);
@@ -147,13 +350,46 @@ export async function saveWorkbookToStorage(workbook: LocationWorkbook): Promise
       req.onerror = () => reject(req.error);
     });
   } catch (err) {
-    // If IndexedDB failed, localStorage was already updated above
+    // fallback
   }
+
+  // Sync to Supabase in background
+  upsertWorkbookSupabase(workbook).catch(() => {});
+
+  syncBroadcastChannel?.postMessage({ type: 'WORKBOOK_UPDATED', locationId: workbook.locationId });
 }
 
-/**
- * Draft protection helpers.
- */
+export async function deleteWorkbookFromStorage(locationId: string): Promise<void> {
+  try {
+    const allWorkbooks = await loadWorkbooksFromStorage();
+    const filtered = allWorkbooks.filter(w => w.locationId !== locationId);
+    localStorage.setItem('performa_workbooks_v2', JSON.stringify(filtered));
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const db = await openDatabase();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_WORKBOOKS, 'readwrite');
+      const store = tx.objectStore(STORE_WORKBOOKS);
+      const req = store.delete(locationId);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    // fallback
+  }
+
+  // Delete from Supabase in background
+  deleteWorkbookSupabase(locationId).catch(() => {});
+
+  syncBroadcastChannel?.postMessage({ type: 'WORKBOOK_DELETED', locationId });
+}
+
+// -------------------------------------------------------------
+// Draft protection helpers
+// -------------------------------------------------------------
 export interface UnsavedDraftState {
   key: string;
   locationId: string;
