@@ -79,7 +79,6 @@ import { CreateLocationModal } from './components/CreateLocationModal';
 import { ExcelDataTable } from './components/ExcelDataTable';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { PWAInstallModal } from './components/PWAInstallModal';
-import { EngineerProfileModal } from './components/EngineerProfileModal';
 import { ExportReferenceModal } from './components/ExportReferenceModal';
 import { AdminPanel } from './components/admin/AdminPanel';
 import { UserDashboard } from './components/user/UserDashboard';
@@ -222,11 +221,6 @@ export function App() {
     const loadedWorkbooks = await loadWorkbooksFromStorage();
     setTeams(loadedTeams);
     setWorkbooks(loadedWorkbooks);
-
-    // If selected team is not set, set default first team
-    if (!selectedTeam && loadedTeams.length > 0) {
-      setSelectedTeam(loadedTeams[0]);
-    }
   };
 
   useEffect(() => {

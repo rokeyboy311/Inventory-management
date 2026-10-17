@@ -135,10 +135,10 @@ export async function fetchTeamsFromSupabase(): Promise<Team[] | null> {
     return data.map((row: any) => ({
       id: row.id,
       name: row.name,
-      code: row.code,
-      division: row.division,
-      subdivision: row.subdivision,
-      inChargeEngineer: row.in_charge_engineer || { name: '', designation: '', contactNumber: '' },
+      code: row.code || '',
+      division: row.division || '',
+      subdivision: row.subdivision || '',
+      inChargeEngineer: row.in_charge_engineer || undefined,
       members: Array.isArray(row.members) ? row.members : [],
       locationExcelIds: Array.isArray(row.location_excel_ids) ? row.location_excel_ids : [],
       status: row.status || 'active',
@@ -159,13 +159,13 @@ export async function upsertTeamSupabase(team: Team): Promise<boolean> {
     const row = {
       id: team.id,
       name: team.name,
-      code: team.code,
-      division: team.division,
-      subdivision: team.subdivision,
-      in_charge_engineer: team.inChargeEngineer,
-      members: team.members,
-      location_excel_ids: team.locationExcelIds,
-      status: team.status,
+      code: team.code || '',
+      division: team.division || '',
+      subdivision: team.subdivision || '',
+      in_charge_engineer: team.inChargeEngineer || {},
+      members: team.members || [],
+      location_excel_ids: team.locationExcelIds || [],
+      status: team.status || 'active',
       updated_at: new Date().toISOString()
     };
 

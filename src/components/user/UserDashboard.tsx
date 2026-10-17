@@ -62,12 +62,13 @@ export function UserDashboard({
     (w.workbookName || '').toLowerCase().includes(q)
   );
 
-  const filteredTeams = teams.filter(t => 
-    (t.name || '').toLowerCase().includes(q) ||
-    (t.code || '').toLowerCase().includes(q) ||
-    (t.subdivision || '').toLowerCase().includes(q) ||
-    (t.division || '').toLowerCase().includes(q)
-  );
+  const filteredTeams = teams.filter(t => {
+    const membersMatch = (t.members || []).some(m => m.toLowerCase().includes(q));
+    return (
+      (t.name || '').toLowerCase().includes(q) ||
+      membersMatch
+    );
+  });
 
   // -------------------------------------------------------------
   // View 1: Team Selection Screen (When no team is selected yet)
@@ -136,10 +137,10 @@ export function UserDashboard({
                 Step 1: Select Your Team
               </span>
               <h2 className="text-xl sm:text-2xl font-black text-white">
-                Choose Your Maintenance Team to Access Location Excels
+                Choose Your Team to Access Location Excels
               </h2>
               <p className="text-xs sm:text-sm text-slate-300">
-                Each team manages its own Location Excel workbooks (with dual <strong>inventory</strong> & <strong>bill</strong> sheets) and standardized DISCOM Performa entries.
+                Select your team below to view and manage Location Excel files (with dual <strong>inventory</strong> & <strong>bill</strong> sheets).
               </p>
             </div>
           </div>
@@ -153,7 +154,7 @@ export function UserDashboard({
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
                 type="text"
-                placeholder="Search team or code..."
+                placeholder="Search team name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
@@ -173,12 +174,12 @@ export function UserDashboard({
                   className="bg-slate-900/70 border border-slate-800 hover:border-emerald-500/60 rounded-2xl p-5 cursor-pointer flex flex-col justify-between transition-all hover:shadow-xl hover:shadow-emerald-950/30 group hover:-translate-y-1"
                 >
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        {team.code}
-                      </span>
-                      <span className="text-[10px] uppercase font-bold text-slate-400">
-                        {team.subdivision}
+                    <div className="flex items-start justify-between">
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <Users className="w-5 h-5" />
+                      </div>
+                      <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        {teamExcelsCount} Excel{teamExcelsCount === 1 ? '' : 's'}
                       </span>
                     </div>
 
@@ -187,22 +188,28 @@ export function UserDashboard({
                         {team.name}
                       </h3>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Division: {team.division}
+                        Maintenance Team
                       </p>
                     </div>
 
-                    {/* Engineer Details */}
-                    <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800/80 space-y-0.5">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">In-Charge</p>
-                      <p className="text-xs font-bold text-slate-200">{team.inChargeEngineer.name}</p>
-                      <p className="text-[11px] text-slate-400">{team.inChargeEngineer.designation}</p>
-                      {team.inChargeEngineer.contactNumber && (
-                        <p className="text-[11px] text-emerald-400 flex items-center gap-1 font-mono pt-1">
-                          <Phone className="w-3 h-3" />
-                          {team.inChargeEngineer.contactNumber}
+                    {/* Members (if any) */}
+                    {team.members && team.members.length > 0 && (
+                      <div className="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/80">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Members
                         </p>
-                      )}
-                    </div>
+                        <div className="flex flex-wrap gap-1">
+                          {team.members.map((m, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/60"
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-4 pt-3.5 border-t border-slate-800/80 flex items-center justify-between text-xs">
@@ -240,15 +247,12 @@ export function UserDashboard({
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                {selectedTeam.code}
-              </span>
               <h1 className="text-base sm:text-lg font-black text-white">
                 {selectedTeam.name}
               </h1>
             </div>
             <p className="text-xs text-slate-400">
-              {selectedTeam.division || 'VYARA'} Division · {selectedTeam.subdivision || 'DOLVAN'} Sub-Division · In-Charge: {selectedTeam.inChargeEngineer?.name || 'Er. In-Charge'}
+              Team Location Excels & Workbooks · Real-time Cloud Sync
             </p>
           </div>
         </div>

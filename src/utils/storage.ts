@@ -54,15 +54,6 @@ export function createDefaultTeams(): Team[] {
     {
       id: 'team-dolvan-maintenance',
       name: 'Dolvan Maintenance Team',
-      code: 'DLV-01',
-      division: 'VYARA',
-      subdivision: 'DOLVAN',
-      inChargeEngineer: {
-        name: 'Er. R. K. Patel',
-        designation: 'Deputy Executive Engineer',
-        contactNumber: '+91 98250 12345',
-        email: 'rkpatel@dgvcl.co.in'
-      },
       members: ['Kishan Kumar', 'Ramesh Bhai', 'Pravin Solanki'],
       locationExcelIds: ['dolvan'],
       status: 'active',
@@ -71,16 +62,7 @@ export function createDefaultTeams(): Team[] {
     },
     {
       id: 'team-vyara-central',
-      name: 'Vyara Sub-Station Team',
-      code: 'VYR-02',
-      division: 'VYARA',
-      subdivision: 'VYARA RURAL',
-      inChargeEngineer: {
-        name: 'Er. M. S. Chaudhary',
-        designation: 'Junior Engineer (Testing)',
-        contactNumber: '+91 94270 67890',
-        email: 'mschaudhary@dgvcl.co.in'
-      },
+      name: 'Vyara Maintenance Team',
       members: ['Suresh Gamit', 'Bharat Vasava'],
       locationExcelIds: ['kandha_konchal'],
       status: 'active',

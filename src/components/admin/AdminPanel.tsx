@@ -80,16 +80,7 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
         const updated: Team = {
           ...existing,
           name: formData.name.trim(),
-          code: formData.code.trim() || existing.code,
-          division: formData.division.trim() || 'VYARA',
-          subdivision: formData.subdivision.trim() || 'DOLVAN',
-          inChargeEngineer: {
-            name: formData.inChargeName.trim() || 'Er. In-Charge',
-            designation: formData.inChargeDesignation.trim() || 'Junior Engineer',
-            contactNumber: formData.inChargePhone.trim(),
-            email: formData.inChargeEmail?.trim()
-          },
-          members: membersList.length > 0 ? membersList : existing.members,
+          members: membersList,
           updatedAt: new Date().toISOString()
         };
         await saveTeamToStorage(updated);
@@ -100,16 +91,7 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
       const newTeam: Team = {
         id: newId,
         name: formData.name.trim(),
-        code: formData.code.trim() || `TM-${Math.floor(100 + Math.random() * 900)}`,
-        division: formData.division.trim() || 'VYARA',
-        subdivision: formData.subdivision.trim() || 'DOLVAN',
-        inChargeEngineer: {
-          name: formData.inChargeName.trim() || 'Er. In-Charge',
-          designation: formData.inChargeDesignation.trim() || 'Junior Engineer',
-          contactNumber: formData.inChargePhone.trim(),
-          email: formData.inChargeEmail?.trim()
-        },
-        members: membersList.length > 0 ? membersList : ['Technician 1'],
+        members: membersList,
         locationExcelIds: [],
         status: 'active',
         createdAt: new Date().toISOString(),
@@ -132,12 +114,10 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
 
   const filteredTeams = teams.filter(t => {
     const q = searchQuery.toLowerCase();
+    const membersMatch = (t.members || []).some(m => m.toLowerCase().includes(q));
     return (
       (t.name || '').toLowerCase().includes(q) ||
-      (t.code || '').toLowerCase().includes(q) ||
-      (t.subdivision || '').toLowerCase().includes(q) ||
-      (t.division || '').toLowerCase().includes(q) ||
-      (t.inChargeEngineer?.name || '').toLowerCase().includes(q)
+      membersMatch
     );
   });
 
@@ -275,7 +255,7 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
-              placeholder="Search by team, engineer, or code..."
+              placeholder="Search by team name or member..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
@@ -289,7 +269,7 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
             <Users className="w-12 h-12 text-slate-600 mx-auto mb-3" />
             <h3 className="text-sm font-bold text-slate-300">No teams found</h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              {searchQuery ? 'Try matching another team name or code.' : 'Click "Create New Team" to add your first maintenance team.'}
+              {searchQuery ? 'Try matching another team name.' : 'Click "Create New Team" to add your first maintenance team.'}
             </p>
           </div>
         ) : (
@@ -307,17 +287,12 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
                     {/* Team Header */}
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            {team.code}
-                          </span>
-                          <span className="text-[10px] uppercase font-bold text-slate-400">
-                            {team.division} / {team.subdivision}
-                          </span>
-                        </div>
-                        <h3 className="text-base font-bold text-white mt-1.5 group-hover:text-emerald-300 transition-colors">
+                        <h3 className="text-lg font-bold text-white group-hover:text-emerald-300 transition-colors">
                           {team.name}
                         </h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Active Maintenance Team
+                        </p>
                       </div>
                       <div className="flex items-center gap-1">
                         <button
@@ -340,41 +315,26 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
                       </div>
                     </div>
 
-                    {/* Engineer In-Charge */}
-                    <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80 space-y-1">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        In-Charge Engineer
-                      </p>
-                      <p className="text-xs font-bold text-slate-200">
-                        {team.inChargeEngineer?.name || 'Er. In-Charge'}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        {team.inChargeEngineer?.designation || 'Junior Engineer'}
-                      </p>
-                      {team.inChargeEngineer?.contactNumber && (
-                        <p className="text-[11px] text-emerald-400 flex items-center gap-1 pt-1 font-mono">
-                          <Phone className="w-3 h-3" />
-                          {team.inChargeEngineer.contactNumber}
-                        </p>
-                      )}
-                    </div>
-
                     {/* Members List */}
-                    {team.members && team.members.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                          Assigned Technicians ({team.members.length})
+                    {team.members && team.members.length > 0 ? (
+                      <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                          Team Members ({team.members.length})
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {team.members.map((m, idx) => (
                             <span
                               key={idx}
-                              className="text-[11px] px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700/60"
+                              className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200 border border-slate-700/60 font-medium"
                             >
                               {m}
                             </span>
                           ))}
                         </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-950/40 rounded-xl p-3 border border-slate-800/60 text-[11px] text-slate-500 italic">
+                        No individual members listed
                       </div>
                     )}
                   </div>
