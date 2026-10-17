@@ -14,6 +14,7 @@ export interface SupabaseConfig {
 // Config Retrieval & Storage
 // -------------------------------------------------------------
 export const DEFAULT_SUPABASE_PROJECT_URL = 'https://qpxyucolxkzvyjjceywa.supabase.co';
+export const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_krImNaaO9rPkB2VS2KrulA_J6gXfZ1g';
 
 export function getSupabaseConfig(): SupabaseConfig | null {
   // 1. Check localStorage
@@ -31,7 +32,11 @@ export function getSupabaseConfig(): SupabaseConfig | null {
 
   // 2. Check import.meta.env
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || DEFAULT_SUPABASE_PROJECT_URL;
-  const envKey = (import.meta as any).env?.VITE_SUPABASE_SERVICE_ROLE_KEY || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
+  const envKey = (import.meta as any).env?.VITE_SUPABASE_SERVICE_ROLE_KEY || 
+                 (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 
+                 (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || 
+                 (import.meta as any).env?.SUPABASE_PUBLISHABLE_KEY ||
+                 DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
   if (envUrl && envKey) {
     return { url: envUrl, key: envKey };
@@ -100,10 +105,10 @@ export async function testSupabaseConnection(url?: string, key?: string): Promis
 
     if (error) {
       // If table doesn't exist yet, but credentials are valid, notice will show
-      if (error.code === '42P01') {
+      if (error.code === '42P01' || error.code === 'PGRST205') {
         return { 
           success: true, 
-          message: 'Connected to Supabase! (Tables need to be created using supabase_schema.sql)' 
+          message: 'Connected to Supabase! (Now run supabase_schema.sql in Supabase SQL Editor)' 
         };
       }
       return { success: false, message: `Supabase Error: ${error.message}` };
