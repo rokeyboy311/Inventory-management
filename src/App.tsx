@@ -87,7 +87,8 @@ import { AdminPanel } from './components/admin/AdminPanel';
 import { UserDashboard } from './components/user/UserDashboard';
 import { BillSheetViewer } from './components/BillSheetViewer';
 import { SupabaseSettingsModal } from './components/admin/SupabaseSettingsModal';
-import { subscribeToDatabaseChanges, isSupabaseConnected } from './utils/supabaseClient';
+import { SupabaseSyncBanner } from './components/SupabaseSyncBanner';
+import { subscribeToDatabaseChanges, isSupabaseConnected, getSupabaseSyncStatus } from './utils/supabaseClient';
 import { RefreshCw } from 'lucide-react';
 
 export function App() {
@@ -612,6 +613,7 @@ export function App() {
   if (!isWorkbookOpen) {
     return (
       <>
+        <SupabaseSyncBanner onSyncReady={reloadData} onOpenSettingsModal={() => setIsSupabaseModalOpen(true)} />
         <UserDashboard
           teams={teams}
           workbooks={workbooks}
@@ -671,6 +673,7 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+      <SupabaseSyncBanner onSyncReady={reloadData} onOpenSettingsModal={() => setIsSupabaseModalOpen(true)} />
       {/* Top Application Header */}
       <header className="bg-slate-800 border-b border-slate-700 px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 shadow-md">
         {/* Left: Back to Team + Location & Workbook Info */}
@@ -739,16 +742,21 @@ export function App() {
         {/* Right: Actions */}
         <div className="flex items-center space-x-2">
           {/* Live Cloud Status */}
-          <div 
-            onClick={() => setIsSupabaseModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 hover:border-slate-600 text-xs cursor-pointer transition-colors"
-            title={isSupabaseConnected() ? "Live Supabase Cloud Connected (All users synced)" : "Click to connect Supabase Cloud"}
-          >
-            <span className={`w-2 h-2 rounded-full ${isSupabaseConnected() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            <span className="hidden md:inline font-mono text-[11px] text-slate-300">
-              {isSupabaseConnected() ? 'Cloud Synced' : 'Offline / Local'}
-            </span>
-          </div>
+          {(() => {
+            const sync = getSupabaseSyncStatus();
+            return (
+              <div 
+                onClick={() => setIsSupabaseModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 hover:border-slate-600 text-xs cursor-pointer transition-colors"
+                title={sync.status === 'synced' ? "Live Supabase Master DB Connected (All devices synced)" : sync.status === 'tables_missing' ? "Supabase Tables Missing - Click to Setup" : "Supabase Offline / Local"}
+              >
+                <span className={`w-2 h-2 rounded-full ${sync.status === 'synced' ? 'bg-emerald-400 animate-pulse' : sync.status === 'tables_missing' ? 'bg-amber-400 animate-ping' : 'bg-slate-400'}`} />
+                <span className="hidden md:inline font-mono text-[11px] text-slate-300">
+                  {sync.label}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Quick Sync Button */}
           <button

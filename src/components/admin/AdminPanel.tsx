@@ -29,7 +29,7 @@ import {
 } from '../../utils/storage';
 import { CreateTeamModal } from './CreateTeamModal';
 import { SupabaseSettingsModal } from './SupabaseSettingsModal';
-import { isSupabaseConnected, subscribeToDatabaseChanges } from '../../utils/supabaseClient';
+import { isSupabaseConnected, getSupabaseSyncStatus, subscribeToDatabaseChanges } from '../../utils/supabaseClient';
 
 interface AdminPanelProps {
   onNavigateToUser: (teamId?: string) => void;
@@ -153,16 +153,21 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
 
         <div className="flex items-center gap-3">
           {/* Live Cloud Status */}
-          <div 
-            onClick={() => setIsSupabaseModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-600 text-xs cursor-pointer transition-colors"
-            title={isSupabaseConnected() ? "Live Supabase Cloud Connected (All users synced)" : "Click to connect Supabase Cloud"}
-          >
-            <span className={`w-2 h-2 rounded-full ${isSupabaseConnected() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            <span className="font-mono text-[11px] text-slate-300">
-              {isSupabaseConnected() ? 'Cloud Synced' : 'Offline / Local'}
-            </span>
-          </div>
+          {(() => {
+            const sync = getSupabaseSyncStatus();
+            return (
+              <div 
+                onClick={() => setIsSupabaseModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-600 text-xs cursor-pointer transition-colors"
+                title={sync.status === 'synced' ? "Live Supabase Master DB Connected (All devices synced)" : sync.status === 'tables_missing' ? "Supabase Tables Missing - Click to Setup" : "Supabase Offline / Local"}
+              >
+                <span className={`w-2 h-2 rounded-full ${sync.status === 'synced' ? 'bg-emerald-400 animate-pulse' : sync.status === 'tables_missing' ? 'bg-amber-400 animate-ping' : 'bg-slate-400'}`} />
+                <span className="font-mono text-[11px] text-slate-300">
+                  {sync.label}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Supabase SQL Database Config Button */}
           <button

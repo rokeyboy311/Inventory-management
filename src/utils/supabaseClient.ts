@@ -184,7 +184,7 @@ export function optimizeWorkbookForStorage(wb: LocationWorkbook): LocationWorkbo
 }
 
 // -------------------------------------------------------------
-// Connection Test
+// Connection Test & Schema Health
 // -------------------------------------------------------------
 export async function testSupabaseConnection(url?: string, key?: string): Promise<{ success: boolean; message: string; schemaReady?: boolean }> {
   try {
@@ -199,21 +199,70 @@ export async function testSupabaseConnection(url?: string, key?: string): Promis
     const { error } = await client.from('teams').select('id').limit(1);
 
     if (error) {
-      if (error.code === '42P01' || error.code === 'PGRST205') {
+      const isMissingTable = 
+        error.code === '42P01' || 
+        error.code === 'PGRST205' || 
+        error.code === 'PGRST204' ||
+        (error.message && (
+          error.message.toLowerCase().includes('schema cache') || 
+          error.message.toLowerCase().includes('does not exist') ||
+          error.message.toLowerCase().includes('could not find the table')
+        ));
+
+      if (isMissingTable) {
         supabaseSchemaReady = false;
         return { 
-          success: true, 
+          success: false, 
           schemaReady: false,
-          message: 'Connected to Supabase! Central Server DB is active; run supabase_schema.sql in Supabase SQL Editor to enable Supabase tables.' 
+          message: 'Connected to Supabase project, but database tables (teams, workbooks, performas) are missing in the schema. Please run supabase_schema.sql in your Supabase SQL Editor.' 
         };
       }
       return { success: false, message: `Supabase Error: ${error.message}` };
     }
 
     supabaseSchemaReady = true;
-    return { success: true, schemaReady: true, message: 'Successfully connected to Supabase Database & Central Server DB!' };
+    return { success: true, schemaReady: true, message: 'Successfully connected to Supabase Master Database! Live real-time sync active across all devices.' };
   } catch (e: any) {
     return { success: false, message: `Connection failed: ${e.message || String(e)}` };
+  }
+}
+
+export async function checkSupabaseHealth(): Promise<{ isConnected: boolean; schemaReady: boolean; message: string }> {
+  const config = getSupabaseConfig();
+  if (!config?.url || !config?.key) {
+    return { isConnected: false, schemaReady: false, message: 'Supabase credentials not configured' };
+  }
+  const client = getSupabaseClient();
+  if (!client) {
+    return { isConnected: false, schemaReady: false, message: 'Could not initialize Supabase client' };
+  }
+  try {
+    const { error } = await client.from('teams').select('id').limit(1);
+    if (error) {
+      const isMissingTable = 
+        error.code === '42P01' || 
+        error.code === 'PGRST205' || 
+        error.code === 'PGRST204' ||
+        (error.message && (
+          error.message.toLowerCase().includes('schema cache') || 
+          error.message.toLowerCase().includes('does not exist') ||
+          error.message.toLowerCase().includes('could not find the table')
+        ));
+
+      if (isMissingTable) {
+        supabaseSchemaReady = false;
+        return {
+          isConnected: true,
+          schemaReady: false,
+          message: 'Tables (teams, workbooks, performas) are not created yet in Supabase.'
+        };
+      }
+      return { isConnected: false, schemaReady: false, message: error.message };
+    }
+    supabaseSchemaReady = true;
+    return { isConnected: true, schemaReady: true, message: 'Supabase Master Database Connected & Active' };
+  } catch (err: any) {
+    return { isConnected: false, schemaReady: false, message: err?.message || 'Connection error' };
   }
 }
 
@@ -414,77 +463,152 @@ export async function deletePerformaSupabase(locationId: string, performaId: str
 }
 
 // -------------------------------------------------------------
-// Realtime Live Cross-User Sync Subscription (Supabase + Server SSE)
+// Realtime Live Cross-User Sync Subscription (Supabase PostgreSQL Changes)
 // -------------------------------------------------------------
 export function subscribeToDatabaseChanges(onChange: () => void): (() => void) | null {
-  const cleanups: Array<() => void> = [];
-
-  // 1. Server-Sent Events (SSE) for Central Server DB real-time updates across all users
-  if (typeof window !== 'undefined' && 'EventSource' in window) {
-    try {
-      const es = new EventSource('/api/sync/events');
-      es.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          if (
-            parsed.type === 'db_teams_updated' ||
-            parsed.type === 'db_workbooks_updated' ||
-            parsed.type === 'db_performa_deleted' ||
-            parsed.type === 'db_storage_optimized'
-          ) {
-            onChange();
-          }
-        } catch {
-          // ignore
-        }
-      };
-      cleanups.push(() => es.close());
-    } catch {
-      // ignore
-    }
-  }
-
-  // 2. Supabase Postgres Changes channel
   const client = getSupabaseClient();
-  if (client) {
-    try {
-      const channel = client
-        .channel('dgvcl_live_cross_user_sync')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'teams' },
-          () => onChange()
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'workbooks' },
-          () => onChange()
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'performas' },
-          () => onChange()
-        )
-        .subscribe();
+  if (!client) return null;
 
-      cleanups.push(() => {
-        client.removeChannel(channel);
-      });
-    } catch (err) {
-      console.warn('Realtime subscription registration warning:', err);
-    }
+  try {
+    const channel = client
+      .channel('dgvcl_live_cross_user_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'teams' },
+        () => onChange()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'workbooks' },
+        () => onChange()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'performas' },
+        () => onChange()
+      )
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Realtime subscription registration warning:', err);
+    return null;
   }
-
-  return () => {
-    cleanups.forEach(fn => fn());
-  };
 }
 
 export function isSupabaseConnected(): boolean {
   const config = getSupabaseConfig();
-  return !!(config && config.url && config.key);
+  if (!config || !config.url || !config.key) return false;
+  if (supabaseSchemaReady === false) return false;
+  return true;
 }
 
 export function isSupabaseSchemaReady(): boolean | null {
   return supabaseSchemaReady;
 }
+
+export function getSupabaseSyncStatus(): {
+  status: 'synced' | 'tables_missing' | 'offline';
+  label: string;
+} {
+  const config = getSupabaseConfig();
+  if (!config || !config.url || !config.key) {
+    return { status: 'offline', label: 'Offline / Local' };
+  }
+  if (supabaseSchemaReady === false) {
+    return { status: 'tables_missing', label: 'DB Tables Missing' };
+  }
+  if (supabaseSchemaReady === true) {
+    return { status: 'synced', label: 'Cloud Synced' };
+  }
+  return { status: 'offline', label: 'Checking Sync...' };
+}
+
+export const SUPABASE_SCHEMA_SQL = `-- =====================================================================
+-- DGVCL INVENTORY MANAGEMENT - SUPABASE SQL SCHEMA
+-- Run this script in your Supabase SQL Editor:
+-- https://supabase.com/dashboard/project/qpxyucolxkzvyjjceywa/sql
+-- =====================================================================
+
+-- 1. Create Teams Table
+CREATE TABLE IF NOT EXISTS public.teams (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    code TEXT NOT NULL DEFAULT '',
+    division TEXT NOT NULL DEFAULT '',
+    subdivision TEXT NOT NULL DEFAULT '',
+    in_charge_engineer JSONB NOT NULL DEFAULT '{}'::jsonb,
+    members JSONB NOT NULL DEFAULT '[]'::jsonb,
+    location_excel_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 2. Create Location Workbooks Table (Stores Dual Sheets: inventory + bill)
+CREATE TABLE IF NOT EXISTS public.workbooks (
+    location_id TEXT PRIMARY KEY,
+    team_id TEXT REFERENCES public.teams(id) ON DELETE SET NULL,
+    location_name TEXT NOT NULL,
+    workbook_name TEXT NOT NULL,
+    active_sheet_name TEXT NOT NULL DEFAULT 'inventory',
+    sheets JSONB NOT NULL DEFAULT '{}'::jsonb,
+    last_modified TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 3. Create Performas Table (Relational records for fast queries & analytics)
+CREATE TABLE IF NOT EXISTS public.performas (
+    id TEXT PRIMARY KEY,
+    location_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    location TEXT NOT NULL,
+    transformer_ref_no TEXT,
+    transformer_make TEXT,
+    transformer_serial_no TEXT,
+    capacity TEXT,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    measurements JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL DEFAULT 'saved',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 4. Open Permissions (Bypass RLS so all clients can read and write without auth errors)
+ALTER TABLE public.teams DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workbooks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.performas DISABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all on teams" ON public.teams;
+CREATE POLICY "Allow all on teams" ON public.teams FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on workbooks" ON public.workbooks;
+CREATE POLICY "Allow all on workbooks" ON public.workbooks FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all on performas" ON public.performas;
+CREATE POLICY "Allow all on performas" ON public.performas FOR ALL TO public USING (true) WITH CHECK (true);
+
+GRANT ALL ON TABLE public.teams TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.workbooks TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.performas TO anon, authenticated, service_role;
+
+-- 5. Realtime Live Broadcast (Instant sync across Desktop & Mobile)
+ALTER TABLE public.teams REPLICA IDENTITY FULL;
+ALTER TABLE public.workbooks REPLICA IDENTITY FULL;
+ALTER TABLE public.performas REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'teams') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.teams;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'workbooks') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.workbooks;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'performas') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.performas;
+  END IF;
+END $$;
+`;
