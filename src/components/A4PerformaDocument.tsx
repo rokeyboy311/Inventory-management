@@ -13,7 +13,6 @@ import {
   Save,
   PlusCircle,
   Trash2,
-  Zap,
   Copy,
   RotateCcw,
   Camera,
@@ -21,7 +20,6 @@ import {
   Smartphone,
   CheckCircle2,
   Sparkles,
-  Calendar,
   MapPin,
   Gauge,
   Search,
@@ -108,6 +106,66 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   const [scanStatusMessage, setScanStatusMessage] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  // Transformer Make Suggestions & Autofill History
+  const [storedMakes, setStoredMakes] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('saved_transformer_makes_history_v1');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) return parsed.filter((m: any) => typeof m === 'string' && m.trim());
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return [];
+  });
+
+  const saveMakeToHistory = (val: string) => {
+    const trimmed = (val || '').trim();
+    if (!trimmed || trimmed.toLowerCase() === 'other') return;
+    setStoredMakes(prev => {
+      const updated = Array.from(new Set([trimmed, ...prev])).slice(0, 50);
+      try {
+        localStorage.setItem('saved_transformer_makes_history_v1', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+  };
+
+  const makeSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    QUICK_MAKES.filter(m => m !== 'Other').forEach(m => set.add(m));
+    ['GETCO', 'BHEL'].forEach(m => set.add(m));
+    storedMakes.forEach(m => set.add(m));
+    allPerformas.forEach(p => {
+      const m = (p.transformerMake || '').trim();
+      if (m && m.toLowerCase() !== 'other') set.add(m);
+    });
+    return Array.from(set);
+  }, [allPerformas, storedMakes]);
+
+  const matchingMakes = useMemo(() => {
+    const query = (performa.transformerMake || '').trim().toLowerCase();
+    if (!query) {
+      return makeSuggestions.slice(0, 8);
+    }
+    const prefixMatches: string[] = [];
+    const containsMatches: string[] = [];
+    makeSuggestions.forEach(m => {
+      const low = m.toLowerCase();
+      if (low.startsWith(query)) {
+        prefixMatches.push(m);
+      } else if (low.includes(query)) {
+        containsMatches.push(m);
+      }
+    });
+    return [...prefixMatches, ...containsMatches].slice(0, 8);
+  }, [makeSuggestions, performa.transformerMake]);
+
   // Refs for ultra-fast keyboard navigation
   const locationInputRef = useRef<HTMLInputElement>(null);
   const makeInputRef = useRef<HTMLInputElement>(null);
@@ -170,16 +228,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
       items,
       [field]: value
     });
-  };
-
-  // Set Yesterday or Today date quickly
-  const handleQuickDateSet = (offsetDays: number) => {
-    if (isReadOnly) return;
-    const d = new Date();
-    d.setDate(d.getDate() + offsetDays);
-    const iso = d.toISOString().slice(0, 10);
-    saveStickyDefaultDate(iso);
-    handleHeaderChange('date', iso);
   };
 
   // Check if a row has any active quantity (either single qty or any sizeQtys)
@@ -1220,14 +1268,14 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
         </div>
 
         {/* ============================================================================
-            SECTION 2: STICKY COMPACT 5-FIELD TRANSFORMER HEADER BAR
-            (Strictly displays ONLY: 1. Location, 2. Date, 3. Make, 4. Serial No, 5. Capacity KVA)
+            SECTION 2: STICKY COMPACT 4-FIELD TRANSFORMER HEADER BAR
+            (Strictly displays: 1. Location, 2. Make [Autofill], 3. Serial No, 4. Capacity KVA)
             Location of Transformer is entered freshly and separately by the user each time.
         ============================================================================ */}
         <div className="sticky top-12 z-20 bg-slate-100/95 backdrop-blur-md border-2 border-slate-800 rounded-md p-2.5 sm:p-3 mb-4 shadow-md print:static print:shadow-none">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-start">
             {/* FIELD 1: Location of Transformer (Standalone user input — entered separately every time) */}
-            <div className="md:col-span-4">
+            <div className="md:col-span-5">
               <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-700 mb-1 flex items-center gap-1">
                 <MapPin className="w-3 h-3 text-blue-600" />
                 <span>1. Location of Transformer</span>
@@ -1249,66 +1297,60 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
               />
             </div>
 
-            {/* FIELD 2: Date (Sticky Date Memory + [Yesterday] & [Today] 1-click micro-buttons) */}
-            <div className="md:col-span-2">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-emerald-600" />
-                  <span>2. Date</span>
-                </label>
-                {!isReadOnly && (
-                  <div className="flex items-center gap-1 print:hidden">
-                    <button
-                      type="button"
-                      onClick={() => handleQuickDateSet(-1)}
-                      className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded text-[9px] font-bold cursor-pointer"
-                      title="Set Yesterday's Date"
-                    >
-                      Yesterday
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickDateSet(0)}
-                      className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[9px] font-bold cursor-pointer"
-                      title="Set Today's Date"
-                    >
-                      Today
-                    </button>
-                  </div>
-                )}
-              </div>
-              <input
-                type="date"
-                disabled={isReadOnly}
-                value={performa.date}
-                onChange={(e) => handleHeaderChange('date', e.target.value)}
-                className="w-full px-2 py-1.5 bg-white border-2 border-slate-400 rounded focus:border-blue-600 outline-none text-xs sm:text-sm font-mono font-bold text-slate-900"
-              />
-            </div>
-
-            {/* FIELD 3: Transformer Make (Input + 1-Tap Quick-Select Pills) */}
+            {/* FIELD 2: Transformer Make (Input + Datalist Autofill + 1-Tap Quick-Select Pills) */}
             <div className="md:col-span-3">
-              <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-700 mb-1">
-                3. Transformer Make
+              <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-700 mb-1 flex items-center justify-between">
+                <span>2. Transformer Make</span>
+                {performa.transformerMake && (
+                  <span className="text-[9px] text-blue-600 font-semibold print:hidden">Autofill on</span>
+                )}
               </label>
               <input
                 ref={makeInputRef}
                 type="text"
+                list="transformer-make-suggestions"
+                autoComplete="off"
                 disabled={isReadOnly}
                 value={performa.transformerMake}
                 onChange={(e) => handleHeaderChange('transformerMake', e.target.value)}
+                onBlur={() => {
+                  if (performa.transformerMake) {
+                    saveMakeToHistory(performa.transformerMake);
+                  }
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    serialInputRef.current?.focus();
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    const currentVal = (performa.transformerMake || '').trim();
+                    if (currentVal && matchingMakes.length > 0) {
+                      const firstMatch = matchingMakes[0];
+                      if (firstMatch.toLowerCase().startsWith(currentVal.toLowerCase()) && firstMatch.toLowerCase() !== currentVal.toLowerCase()) {
+                        e.preventDefault();
+                        handleHeaderChange('transformerMake', firstMatch);
+                        saveMakeToHistory(firstMatch);
+                        serialInputRef.current?.focus();
+                        return;
+                      }
+                    }
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (performa.transformerMake) {
+                        saveMakeToHistory(performa.transformerMake);
+                      }
+                      serialInputRef.current?.focus();
+                    }
                   }
                 }}
                 placeholder="Select or type Make..."
-                className="w-full px-2.5 py-1 bg-white border-2 border-slate-400 rounded focus:border-blue-600 outline-none text-xs font-bold text-slate-900 mb-1"
+                className="w-full px-2.5 py-1.5 bg-white border-2 border-slate-400 rounded focus:border-blue-600 outline-none text-xs font-bold text-slate-900 mb-1"
               />
+              <datalist id="transformer-make-suggestions">
+                {makeSuggestions.map(m => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
               {!isReadOnly && (
                 <div className="flex flex-wrap gap-1 print:hidden">
-                  {QUICK_MAKES.map(make => {
+                  {matchingMakes.map(make => {
                     const isSelected = (performa.transformerMake || '').toLowerCase() === make.toLowerCase();
                     return (
                       <button
@@ -1317,6 +1359,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                         onClick={() => {
                           handleHeaderChange('transformerMake', make === 'Other' ? '' : make);
                           if (make !== 'Other') {
+                            saveMakeToHistory(make);
                             serialInputRef.current?.focus();
                           }
                         }}
@@ -1334,10 +1377,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
               )}
             </div>
 
-            {/* FIELD 4: Transformer Serial Number (Enter moves directly to Capacity) */}
-            <div className="md:col-span-1">
+            {/* FIELD 3: Transformer Serial Number (Enter moves directly to Capacity) */}
+            <div className="md:col-span-2">
               <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-700 mb-1 truncate" title="Transformer Serial Number">
-                4. Serial No.
+                3. Serial No.
               </label>
               <input
                 ref={serialInputRef}
@@ -1357,10 +1400,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
               />
             </div>
 
-            {/* FIELD 5: Capacity (KVA) (Alphanumeric + 1-Tap Quick Capacity Chips -> jumps straight to Row 1!) */}
+            {/* FIELD 4: Capacity (KVA) (Alphanumeric + 1-Tap Quick Capacity Chips -> jumps straight to Row 1!) */}
             <div className="md:col-span-2">
               <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-700 mb-1">
-                5. Capacity (KVA)
+                4. Capacity (KVA)
               </label>
               <input
                 ref={capacityInputRef}
@@ -1413,20 +1456,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
             SECTION 3: CONSOLIDATED MASTER ITEMS TABLE WITH SIZE QUANTITY SUB-FIELDS
         ============================================================================ */}
         <div className="border-2 border-slate-800 rounded-sm mb-4 overflow-hidden">
-          {/* Speed Hint Banner */}
-          {!isReadOnly && (
-            <div className="bg-emerald-950 text-emerald-200 px-3 py-1.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] print:hidden">
-              <div className="flex items-center gap-2">
-                <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>
-                  <strong>Auto-Yes Engine Active:</strong> Enter quantity in any size field or tap <code className="bg-emerald-900 px-1 rounded text-white">[1] [2] [3] [4] [6] [8]</code> ➔ Auto-marks <strong>Material=Yes &amp; Labour=Yes</strong>! Click Description or press <kbd className="bg-slate-800 px-1 rounded text-amber-300">Space</kbd> for Yes without QTY.
-                </span>
-              </div>
-              <span className="font-mono font-bold text-emerald-400 shrink-0">
-                Showing {visibleRowIndices.length} of {items.length} items
-              </span>
-            </div>
-          )}
 
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
