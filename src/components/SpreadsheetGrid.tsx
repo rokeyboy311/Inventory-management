@@ -506,7 +506,10 @@ export const SpreadsheetGrid: React.FC<SpreadsheetGridProps> = ({
                               onBlur={commitCellEdit}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
+                                  e.preventDefault();
                                   commitCellEdit();
+                                  const maxRow = currentSheet.rows.length - 1;
+                                  setSelectedCell(prev => prev ? { ...prev, row: Math.min(maxRow, prev.row + 1) } : null);
                                 } else if (e.key === 'Escape') {
                                   setEditingCell(null);
                                 }

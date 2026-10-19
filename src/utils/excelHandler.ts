@@ -147,22 +147,35 @@ export function analyzeSheetForPerformas(
       status: 'saved'
     };
 
-    // If specific item QTY or Remarks are present in columns, map them
+    // If specific item QTY or sizeQtys are present in columns, map them
     performa.items.forEach(item => {
-      const colQty = row[`${item.description} - QTY`] ?? row[item.description];
+      if (item.sizeFields && item.sizeFields.length > 0) {
+        const nextSizeQtys: Record<string, number | string> = { ...(item.sizeQtys || {}) };
+        let anyFilled = false;
+        item.sizeFields.forEach(sf => {
+          const sfVal = row[`${item.description} (${sf})`] ?? row[`${item.description} - ${sf}`];
+          if (sfVal !== undefined && sfVal !== '') {
+            const num = parseFloat(sfVal);
+            nextSizeQtys[sf] = isNaN(num) ? sfVal : num;
+            anyFilled = true;
+          }
+        });
+        item.sizeQtys = nextSizeQtys;
+        if (anyFilled) {
+          item.materialYes = true;
+          item.labourYes = true;
+        }
+      }
+      const colQty = row[`${item.description} - QTY`] ?? row[`${item.description} (QTY)`] ?? row[item.description];
       if (colQty !== undefined && colQty !== '') {
         const num = parseFloat(colQty);
         item.qty = isNaN(num) ? colQty : num;
       }
-      const colRemarks = row[`${item.description} - Remarks`];
-      if (colRemarks) {
-        item.remarks = String(colRemarks);
-      }
-      const colMat = row[`${item.description} - Material`];
+      const colMat = row[`${item.description} - Material`] ?? row[`${item.description} (Material)`];
       if (colMat !== undefined) {
         item.materialYes = String(colMat).toLowerCase().includes('y') || colMat === true || colMat === 1;
       }
-      const colLab = row[`${item.description} - Labour`];
+      const colLab = row[`${item.description} - Labour`] ?? row[`${item.description} (Labour)`];
       if (colLab !== undefined) {
         item.labourYes = String(colLab).toLowerCase().includes('y') || colLab === true || colLab === 1;
       }
@@ -218,14 +231,17 @@ export function exportPerformasToExcel(
       'Ampere N': p.measurements.ampereN
     };
 
-    // Append each item's material, labour, qty, and remarks
+    // Append each item's material, labour, qty, and sizeQtys (without remarks)
     p.items.forEach(item => {
       row[`${item.description} (Unit)`] = item.unit;
       row[`${item.description} (Material)`] = item.materialYes ? 'Yes' : 'No';
       row[`${item.description} (Labour)`] = item.labourYes ? 'Yes' : 'No';
-      row[`${item.description} (QTY)`] = item.qty;
-      if (item.remarks) {
-        row[`${item.description} (Remarks)`] = item.remarks;
+      if (item.sizeFields && item.sizeFields.length > 0) {
+        item.sizeFields.forEach(sf => {
+          row[`${item.description} (${sf})`] = item.sizeQtys?.[sf] ?? '';
+        });
+      } else {
+        row[`${item.description} (QTY)`] = item.qty;
       }
     });
 

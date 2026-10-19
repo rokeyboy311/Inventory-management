@@ -642,7 +642,7 @@ function createInitialSeedData(): DatabaseSchema {
         inventory: {
           name: 'inventory',
           type: 'inventory',
-          performas: [createDolvanSamplePerforma('Dolvan')],
+          performas: [createDolvanSamplePerforma()],
           isCompatible: true,
           rawRowsCount: 1
         },
@@ -788,12 +788,14 @@ export class DatabaseStore {
                 id: it.id,
                 srNo: it.srNo,
                 ...(it.subIndex !== undefined ? { subIndex: it.subIndex } : {}),
+                ...(it.srLabel ? { srLabel: it.srLabel } : {}),
                 description: it.description,
                 unit: it.unit,
                 materialYes: !!it.materialYes,
                 labourYes: !!it.labourYes,
-                qty: Number(it.qty) || 0,
-                remarks: (it.remarks || '').trim()
+                qty: it.qty === undefined || it.qty === null ? '' : it.qty,
+                ...(it.sizeFields ? { sizeFields: it.sizeFields } : {}),
+                ...(it.sizeQtys ? { sizeQtys: it.sizeQtys } : {})
               }))
             });
           }

@@ -1,31 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
-  Building2, 
   MapPin, 
-  Layers, 
-  Home, 
-  Wrench, 
-  User, 
-  Plus, 
   Check, 
   X, 
   Zap, 
-  RotateCcw, 
-  Sparkles, 
   Save, 
   FileSpreadsheet, 
   FolderTree, 
   ArrowRight,
   CheckCircle2,
   Clock,
-  Calendar,
-  Activity,
-  PlusCircle,
-  Trash2
+  Calendar
 } from 'lucide-react';
 import { InventoryItemDefinition, Division, SubDivision, Location, Transformer } from '../types/inventory';
 import { DynamicInventoryForm } from './DynamicInventoryForm';
 import { sanitizeFolderName } from '../utils/excelExporter';
+import { getStickyDefaultDate, saveStickyDefaultDate } from '../types/performa';
 
 interface QuickEntryViewProps {
   location: string;
@@ -51,7 +41,6 @@ interface QuickEntryViewProps {
   saveStatus: 'idle' | 'syncing' | 'saved' | 'error' | 'offline_queued';
   lastSavedMessage: string;
   onOpenTargetFile: (loc: string, type: 'In house' | 'Maintenance') => void;
-  // Hierarchy & Transformer props
   divisions?: Division[];
   subdivisions?: SubDivision[];
   locationsList?: Location[];
@@ -62,13 +51,13 @@ interface QuickEntryViewProps {
   onEntryDateChange?: (date: string) => void;
 }
 
+const QUICK_MAKES = ['Aman', 'Voltamp', 'ABB', 'Crompton', 'Bharat Bijlee', 'Kotsons', 'Other'];
+const QUICK_CAPACITIES = ['10', '16', '25', '63', '63/22', '100', '200', '315', '500'];
+
 export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
   location,
   onLocationChange,
   locationType,
-  onLocationTypeChange,
-  submittedBy,
-  onSubmittedByChange,
   availableLocations,
   onAddCustomLocation,
   itemDefinitions,
@@ -86,263 +75,248 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
   saveStatus,
   lastSavedMessage,
   onOpenTargetFile,
-  divisions = [],
-  subdivisions = [],
   locationsList = [],
   transformers = [],
-  selectedTransformerId,
   onTransformerChange,
-  entryDate = new Date().toISOString().slice(0, 10),
+  entryDate = getStickyDefaultDate(),
   onEntryDateChange,
 }) => {
-  const [isAddingLocation, setIsAddingLocation] = useState(false);
-  const [newLocationInput, setNewLocationInput] = useState('');
+  const [tcMake, setTcMake] = useState<string>('Aman');
+  const [tcSerial, setTcSerial] = useState<string>('');
+  const [tcCapacity, setTcCapacity] = useState<string>('100');
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
 
-  // Selected Division & SubDivision IDs with cascading reset
-  const activeDivisions = divisions.length > 0 ? divisions : [{ id: 'div-vyara', name: 'VYARA', code: 'VYR', status: 'active' as const, createdAt: '', updatedAt: '' }];
-  const [selectedDivisionId, setSelectedDivisionId] = useState<string>(activeDivisions[0]?.id || 'div-vyara');
+  const serialInputRef = useRef<HTMLInputElement>(null);
+  const capacityInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredSubdivisions = subdivisions.filter(s => s.divisionId === selectedDivisionId || !s.divisionId);
-  const activeSubdivisions = filteredSubdivisions.length > 0 
-    ? filteredSubdivisions 
-    : [{ id: 'sub-dolvan', divisionId: selectedDivisionId, name: 'DOLVAN', code: 'DLV', status: 'active' as const, createdAt: '', updatedAt: '' }];
-  
-  const [selectedSubdivisionId, setSelectedSubdivisionId] = useState<string>(activeSubdivisions[0]?.id || 'sub-dolvan');
+  // Background default Division & Sub-Division (hidden from entry UI as required)
+  const backgroundDivision = 'ANKLESHWAR IND DIVISION';
+  const backgroundSubDivision = 'ANKLESHWAR GIDC SDN';
 
-  const currentDiv = activeDivisions.find(d => d.id === selectedDivisionId) || activeDivisions[0];
-  const currentSub = activeSubdivisions.find(s => s.id === selectedSubdivisionId) || activeSubdivisions[0];
+  const cleanFolder = sanitizeFolderName(location || 'DOLVAN');
+  const primaryWorkbookName = 'DOLVAN_INVENTERY.xlsx';
 
-  const handleDivisionChange = (divId: string) => {
-    setSelectedDivisionId(divId);
-    const nextSubs = subdivisions.filter(s => s.divisionId === divId);
-    if (nextSubs.length > 0) {
-      setSelectedSubdivisionId(nextSubs[0].id);
+  const handleLocationSelect = (selectedLoc: string) => {
+    onLocationChange(selectedLoc);
+    if (!availableLocations.includes(selectedLoc) && selectedLoc.trim()) {
+      onAddCustomLocation(selectedLoc.trim());
     }
+    // Auto-Fill Make, Serial, Capacity if matching transformer exists in history
+    const matchedLocObj = locationsList.find(
+      l => l.name.toLowerCase() === selectedLoc.toLowerCase()
+    );
+    const matchedTc = transformers.find(
+      t => (matchedLocObj && t.locationId === matchedLocObj.id) || t.locationId.toLowerCase() === selectedLoc.toLowerCase()
+    );
+    if (matchedTc) {
+      setTcMake(matchedTc.make || tcMake);
+      setTcSerial(matchedTc.serialNumber || tcSerial);
+      setTcCapacity(matchedTc.capacity || tcCapacity);
+      if (onTransformerChange) onTransformerChange(matchedTc.id);
+    }
+    setShowLocationDropdown(false);
   };
 
-  const handleSaveLocation = () => {
-    if (newLocationInput.trim()) {
-      onAddCustomLocation(newLocationInput.trim());
-      onLocationChange(newLocationInput.trim());
-      setNewLocationInput('');
-      setIsAddingLocation(false);
-    }
+  const handleSetQuickDate = (offsetDays: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    const iso = d.toISOString().slice(0, 10);
+    saveStickyDefaultDate(iso);
+    if (onEntryDateChange) onEntryDateChange(iso);
   };
 
-  const cleanFolder = sanitizeFolderName(location);
-  const cleanSubName = sanitizeFolderName(currentSub.name);
-  const primaryWorkbookName = `${cleanSubName}.xlsx`;
+  const filteredLocations = availableLocations.filter(l =>
+    l.toLowerCase().includes((location || '').toLowerCase())
+  );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fadeIn font-terminal">
-      
-      {/* Target File Destination Banner: Canonical Sub-Division Workbook */}
-      <div className="bg-[#1c1c1f] border border-[rgba(226,226,231,0.12)] p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center space-x-3 truncate">
-          <div className="p-2.5 bg-[#111113] border border-[rgba(226,226,231,0.15)] text-[#00ffaa]">
-            <FolderTree className="w-5 h-5" />
-          </div>
-          <div className="truncate">
-            <span className="text-[10px] text-[rgba(226,226,231,0.4)] uppercase tracking-[0.2em] font-mono">
-              Central Hierarchy: {currentDiv.name} ➔ {currentSub.name} ➔ {cleanFolder}
-            </span>
-            <div className="flex items-center space-x-2 mt-0.5 truncate">
-              <span className="text-white font-mono text-xs sm:text-sm font-bold truncate">
-                📁 {currentSub.name}/
-              </span>
-              <span className="text-[rgba(226,226,231,0.4)] font-bold">➔</span>
-              <span className="text-[#00ffaa] font-mono text-xs sm:text-sm font-bold truncate flex items-center gap-1.5">
-                <FileSpreadsheet className="w-4 h-4 text-[#00ffaa] shrink-0" />
-                {primaryWorkbookName}
-              </span>
-              <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                (Location: {cleanFolder} • {locationType})
-              </span>
-            </div>
-          </div>
+    <div className="p-3 sm:p-6 space-y-4 animate-fadeIn font-terminal">
+      {/* Compact Destination Bar */}
+      <div className="bg-[#1c1c1f] border border-[rgba(226,226,231,0.12)] px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 rounded-lg">
+        <div className="flex items-center space-x-2.5 truncate">
+          <FolderTree className="w-4 h-4 text-[#00ffaa] shrink-0" />
+          <span className="text-xs text-white font-mono truncate">
+            Target Workbook: <strong className="text-[#00ffaa]">{primaryWorkbookName}</strong> ({cleanFolder})
+          </span>
+          <span className="hidden md:inline text-[10px] text-slate-500 font-mono">
+            [{backgroundDivision} • {backgroundSubDivision}]
+          </span>
         </div>
 
         <button
           type="button"
           onClick={() => onOpenTargetFile(location, locationType)}
-          className="px-3.5 py-1.5 bg-[#111113] hover:bg-[rgba(226,226,231,0.08)] text-[#e2e2e7] border border-[rgba(226,226,231,0.2)] hover:border-[#00ffaa] text-xs font-semibold uppercase transition cursor-pointer flex items-center space-x-1.5 font-terminal"
+          className="px-3 py-1 bg-[#111113] hover:bg-[rgba(226,226,231,0.08)] text-[#e2e2e7] border border-[rgba(226,226,231,0.2)] hover:border-[#00ffaa] text-xs font-semibold uppercase transition cursor-pointer flex items-center space-x-1"
         >
           <span>View Workbook</span>
           <ArrowRight className="w-3.5 h-3.5 text-[#00ffaa]" />
         </button>
       </div>
 
-      {/* 1. Header Control Section: Cascading Division, Sub-Division, Date, Location, Type */}
-      <div className="bg-[#1c1c1f] border border-[rgba(226,226,231,0.12)] p-5 space-y-4">
-        
-        {/* Row A: Division & Sub-Division Cascading Selectors */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[rgba(226,226,231,0.08)] text-xs">
-          <div className="flex flex-wrap items-center gap-3">
-            
-            {/* Division Dropdown */}
-            <div className="flex items-center space-x-2">
-              <Building2 className="w-4 h-4 text-[#00ffaa]" />
-              <span className="text-[rgba(226,226,231,0.4)] uppercase text-[10px] tracking-wider font-mono">Division:</span>
-              <select
-                value={selectedDivisionId}
-                onChange={(e) => handleDivisionChange(e.target.value)}
-                className="bg-[#111113] border border-[rgba(226,226,231,0.2)] px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-[#00ffaa]"
-              >
-                {activeDivisions.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <span className="text-[rgba(226,226,231,0.3)]">➔</span>
-
-            {/* Sub-Division Dropdown (Filtered to Selected Division) */}
-            <div className="flex items-center space-x-2">
-              <span className="text-[rgba(226,226,231,0.4)] uppercase text-[10px] tracking-wider font-mono">Sub-Division:</span>
-              <select
-                value={selectedSubdivisionId}
-                onChange={(e) => setSelectedSubdivisionId(e.target.value)}
-                className="bg-[#111113] border border-[rgba(226,226,231,0.2)] px-2.5 py-1 text-[#00ccff] font-mono text-xs focus:outline-none focus:border-[#00ffaa]"
-              >
-                {activeSubdivisions.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-          </div>
-
-          {/* Date Picker */}
-          <div className="flex items-center space-x-2">
-            <Calendar className="w-4 h-4 text-[#00ffaa]" />
-            <span className="text-[rgba(226,226,231,0.5)] font-medium text-xs font-mono">Work Date:</span>
-            <input
-              type="date"
-              value={entryDate}
-              onChange={(e) => onEntryDateChange && onEntryDateChange(e.target.value)}
-              className="bg-[#111113] border border-[rgba(226,226,231,0.2)] px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-[#00ffaa]"
-            />
-          </div>
-        </div>
-
-        {/* Row B: Location, TC, Location Type, Engineer */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
+      {/* STRICT 5-FIELD COMPACT STICKY TOP BAR */}
+      <div className="sticky top-2 z-20 bg-[#1c1c1f]/95 backdrop-blur-md border-2 border-[#00ffaa]/40 p-3.5 rounded-xl shadow-xl">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
           
-          {/* Location Dropdown */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-[rgba(226,226,231,0.7)] flex items-center space-x-1.5 uppercase tracking-wider text-[10px]">
-                <MapPin className="w-3.5 h-3.5 text-[#00ffaa]" />
-                <span>Site Location</span>
-                <span className="text-[#00ffaa]">*</span>
-              </label>
-              {!isAddingLocation && (
-                <button
-                  type="button"
-                  onClick={() => setIsAddingLocation(true)}
-                  className="text-[10px] text-[#00ffaa] hover:underline flex items-center space-x-1 font-mono uppercase cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>+ New</span>
-                </button>
-              )}
-            </div>
-
-            {isAddingLocation ? (
-              <div className="flex items-center space-x-1.5">
-                <input
-                  type="text"
-                  placeholder="New location name inside DOLVAN folder..."
-                  value={newLocationInput}
-                  onChange={(e) => setNewLocationInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation()}
-                  className="w-full bg-[#111113] border border-[#00ffaa] px-3 py-2 text-xs text-white uppercase focus:outline-none"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={handleSaveLocation}
-                  className="p-2 bg-[#00ffaa] hover:bg-[#00dd95] text-[#111113] transition cursor-pointer"
-                  title="Save location to DOLVAN folder"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsAddingLocation(false)}
-                  className="p-2 bg-[#111113] text-[rgba(226,226,231,0.5)] hover:text-white border border-[rgba(226,226,231,0.2)] transition cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <select
-                value={location}
-                onChange={(e) => onLocationChange(e.target.value)}
-                className="w-full bg-[#111113] border border-[rgba(226,226,231,0.2)] hover:border-[#00ffaa] px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-[#00ffaa]"
-              >
-                <optgroup label="📁 DOLVAN Sub-Division Folder">
-                  {availableLocations.map((loc) => (
-                    <option key={loc} value={loc}>
-                      📍 {loc}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-            )}
-          </div>
-
-          {/* Transformer Point Selector */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-[rgba(226,226,231,0.7)] flex items-center space-x-1.5 uppercase tracking-wider text-[10px]">
-              <Zap className="w-3.5 h-3.5 text-[#00ffaa]" />
-              <span>Transformer Point</span>
-            </label>
-            <select
-              value={selectedTransformerId || ''}
-              onChange={(e) => onTransformerChange && onTransformerChange(e.target.value)}
-              className="w-full bg-[#111113] border border-[rgba(226,226,231,0.2)] hover:border-[#00ffaa] px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-[#00ffaa]"
-            >
-              <option value="">-- General TC Point --</option>
-              {transformers.map(t => (
-                <option key={t.id} value={t.id}>
-                  TC #{t.serialNumber} ({t.make} • {t.capacity})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Location Type Selection */}
-          {/* Location Type - Permanently Maintenance */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-[rgba(226,226,231,0.7)] flex items-center space-x-1.5 uppercase tracking-wider text-[10px]">
-              <Layers className="w-3.5 h-3.5 text-[#00ccff]" />
-              <span>Location Type</span>
-              <span className="text-[#00ccff]">*</span>
-            </label>
-            <div className="flex items-center space-x-2 px-3 py-2 bg-[#111113] border border-[#00ccff]/50 rounded-xl text-xs font-semibold text-[#00ccff] font-terminal">
-              <Wrench className="w-3.5 h-3.5 text-[#00ccff]" />
-              <span className="uppercase tracking-wide font-bold">TC Maintenance</span>
-            </div>
-          </div>
-
-          {/* Submitted By */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-[rgba(226,226,231,0.7)] flex items-center space-x-1.5 uppercase tracking-wider text-[10px]">
-              <User className="w-3.5 h-3.5 text-[#00ffaa]" />
-              <span>Entered By</span>
+          {/* Field 1: Location of Transformer */}
+          <div className="md:col-span-4 relative">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-[#00ffaa] mb-1 flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              <span>1. Location of Transformer</span>
             </label>
             <input
               type="text"
-              placeholder="e.g. Rajesh Patel"
-              value={submittedBy}
-              onChange={(e) => onSubmittedByChange(e.target.value)}
-              className="w-full bg-[#111113] border border-[rgba(226,226,231,0.2)] hover:border-[#00ffaa] px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00ffaa]"
+              value={location}
+              onFocus={() => setShowLocationDropdown(true)}
+              onBlur={() => setTimeout(() => setShowLocationDropdown(false), 180)}
+              onChange={(e) => {
+                onLocationChange(e.target.value);
+                setShowLocationDropdown(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleLocationSelect(location);
+                  serialInputRef.current?.focus();
+                }
+              }}
+              placeholder="e.g. D1S2-66-B-2 or પ્લોટ નં. 492/4"
+              className="w-full bg-[#111113] border border-[rgba(226,226,231,0.25)] focus:border-[#00ffaa] px-3 py-1.5 text-xs text-white font-bold rounded outline-none"
             />
+            {showLocationDropdown && filteredLocations.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-[#111113] border border-[#00ffaa]/50 rounded-lg shadow-2xl z-30 max-h-44 overflow-y-auto divide-y divide-slate-800">
+                {filteredLocations.map(loc => (
+                  <button
+                    key={loc}
+                    type="button"
+                    onMouseDown={() => handleLocationSelect(loc)}
+                    className="w-full text-left px-3 py-1.5 hover:bg-slate-800 text-xs text-white font-medium flex items-center justify-between cursor-pointer"
+                  >
+                    <span>📍 {loc}</span>
+                    <span className="text-[10px] text-[#00ffaa] font-mono">Auto-Fill</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Field 2: Date (Sticky Date Memory + [Yesterday] [Today]) */}
+          <div className="md:col-span-2">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[#00ffaa] flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                <span>2. Date</span>
+              </label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleSetQuickDate(-1)}
+                  className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[9px] font-mono cursor-pointer"
+                >
+                  Yesterday
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetQuickDate(0)}
+                  className="px-1.5 py-0.5 bg-[#00ffaa] text-[#111113] rounded text-[9px] font-mono font-bold cursor-pointer"
+                >
+                  Today
+                </button>
+              </div>
+            </div>
+            <input
+              type="date"
+              value={entryDate}
+              onChange={(e) => {
+                saveStickyDefaultDate(e.target.value);
+                if (onEntryDateChange) onEntryDateChange(e.target.value);
+              }}
+              className="w-full bg-[#111113] border border-[rgba(226,226,231,0.25)] focus:border-[#00ffaa] px-2.5 py-1.5 text-xs text-white font-mono rounded outline-none"
+            />
+          </div>
+
+          {/* Field 3: Transformer Make */}
+          <div className="md:col-span-3">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-[#00ffaa] mb-1">
+              3. Transformer Make
+            </label>
+            <input
+              type="text"
+              value={tcMake}
+              onChange={(e) => setTcMake(e.target.value)}
+              placeholder="Aman / Voltamp / ABB..."
+              className="w-full bg-[#111113] border border-[rgba(226,226,231,0.25)] focus:border-[#00ffaa] px-2.5 py-1 text-xs text-white font-bold rounded outline-none mb-1"
+            />
+            <div className="flex flex-wrap gap-1">
+              {QUICK_MAKES.map(make => (
+                <button
+                  key={make}
+                  type="button"
+                  onClick={() => {
+                    setTcMake(make === 'Other' ? '' : make);
+                    if (make !== 'Other') serialInputRef.current?.focus();
+                  }}
+                  className={`px-1.5 py-0.5 text-[9px] font-mono font-bold rounded border cursor-pointer ${
+                    tcMake.toLowerCase() === make.toLowerCase()
+                      ? 'bg-[#00ffaa] text-[#111113] border-[#00ffaa]'
+                      : 'bg-[#111113] text-slate-300 border-slate-700 hover:border-[#00ffaa]'
+                  }`}
+                >
+                  {make}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Field 4: Transformer Serial Number */}
+          <div className="md:col-span-1">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-[#00ffaa] mb-1 truncate">
+              4. Serial No
+            </label>
+            <input
+              ref={serialInputRef}
+              type="text"
+              value={tcSerial}
+              onChange={(e) => setTcSerial(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  capacityInputRef.current?.focus();
+                }
+              }}
+              placeholder="743"
+              className="w-full bg-[#111113] border border-[rgba(226,226,231,0.25)] focus:border-[#00ffaa] px-2 py-1.5 text-xs text-white font-mono font-bold rounded outline-none"
+            />
+          </div>
+
+          {/* Field 5: Capacity (KVA) */}
+          <div className="md:col-span-2">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-[#00ffaa] mb-1">
+              5. Capacity (KVA)
+            </label>
+            <input
+              ref={capacityInputRef}
+              type="text"
+              value={tcCapacity}
+              onChange={(e) => setTcCapacity(e.target.value)}
+              placeholder="63/22 or 100"
+              className="w-full bg-[#111113] border border-[rgba(226,226,231,0.25)] focus:border-[#00ffaa] px-2 py-1 text-xs text-white font-mono font-bold rounded outline-none mb-1"
+            />
+            <div className="flex flex-wrap gap-1">
+              {QUICK_CAPACITIES.map(cap => (
+                <button
+                  key={cap}
+                  type="button"
+                  onClick={() => setTcCapacity(cap)}
+                  className={`px-1.5 py-0.5 text-[9px] font-mono font-bold rounded border cursor-pointer ${
+                    tcCapacity === cap
+                      ? 'bg-[#00ffaa] text-[#111113] border-[#00ffaa]'
+                      : 'bg-[#111113] text-slate-300 border-slate-700 hover:border-[#00ffaa]'
+                  }`}
+                >
+                  {cap}
+                </button>
+              ))}
+            </div>
           </div>
 
         </div>
@@ -364,9 +338,7 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
       />
 
       {/* 3. Bottom Action Bar */}
-      <div className="bg-[#1c1c1f] border border-[rgba(226,226,231,0.12)] p-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 sticky bottom-4 z-30 font-terminal">
-        
-        {/* Status Message */}
+      <div className="bg-[#1c1c1f] border border-[rgba(226,226,231,0.12)] p-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 sticky bottom-4 z-30 font-terminal rounded-xl">
         <div className="flex items-center space-x-2 text-xs">
           {saveStatus === 'syncing' && (
             <div className="flex items-center space-x-1.5 px-3 py-1 bg-[#111113] border border-[#00ccff] text-[#00ccff] animate-pulse">
@@ -378,31 +350,23 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
           {saveStatus === 'saved' && (
             <div className="flex items-center space-x-1.5 px-3 py-1 bg-[#111113] border border-[#00ffaa] text-[#00ffaa]">
               <CheckCircle2 className="w-3.5 h-3.5 text-[#00ffaa]" />
-              <span className="font-semibold">{lastSavedMessage || `Saved into ${currentSub.name}/${primaryWorkbookName}!`}</span>
-            </div>
-          )}
-
-          {saveStatus === 'offline_queued' && (
-            <div className="flex items-center space-x-1.5 px-3 py-1 bg-[#111113] border border-amber-500 text-amber-300">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span className="font-semibold">Saved locally. Cloud sync pending.</span>
+              <span className="font-semibold">{lastSavedMessage || `Saved into ${primaryWorkbookName}!`}</span>
             </div>
           )}
 
           {saveStatus === 'idle' && (
             <div className="flex items-center space-x-1.5 text-[rgba(226,226,231,0.5)] text-xs font-mono">
               <FileSpreadsheet className="w-3.5 h-3.5 text-[#00ffaa]" />
-              <span>Target Workbook: <strong className="text-white">{currentSub.name}/{primaryWorkbookName}</strong></span>
+              <span>Target Workbook: <strong className="text-white">{primaryWorkbookName}</strong></span>
             </div>
           )}
         </div>
 
-        {/* Buttons */}
         <div className="flex items-center space-x-2.5 w-full sm:w-auto justify-end">
           <button
             type="button"
             onClick={onResetForm}
-            className="px-4 py-2.5 bg-transparent hover:bg-[rgba(226,226,231,0.08)] border border-[rgba(226,226,231,0.2)] text-[rgba(226,226,231,0.8)] text-xs uppercase font-semibold transition cursor-pointer font-terminal"
+            className="px-4 py-2.5 bg-transparent hover:bg-[rgba(226,226,231,0.08)] border border-[rgba(226,226,231,0.2)] text-[rgba(226,226,231,0.8)] text-xs uppercase font-semibold transition cursor-pointer"
           >
             Clear Form
           </button>
@@ -411,14 +375,13 @@ export const QuickEntryView: React.FC<QuickEntryViewProps> = ({
             type="button"
             onClick={onSaveAndSync}
             disabled={saveStatus === 'syncing'}
-            className="flex-1 sm:flex-none flex items-center justify-center space-x-2 px-6 py-2.5 bg-[#00ffaa] hover:bg-[#00dd95] text-[#111113] text-xs font-bold uppercase transition cursor-pointer disabled:opacity-60 font-terminal"
+            className="flex-1 sm:flex-none flex items-center justify-center space-x-2 px-6 py-2.5 bg-[#00ffaa] hover:bg-[#00dd95] text-[#111113] text-xs font-bold uppercase transition cursor-pointer disabled:opacity-60"
           >
             <Save className={`w-4 h-4 ${saveStatus === 'syncing' ? 'animate-spin' : ''}`} />
-            <span>{saveStatus === 'syncing' ? 'Saving Entry...' : `Save Daily Work Entry`}</span>
+            <span>{saveStatus === 'syncing' ? 'Saving Entry...' : 'Save & Next Performa'}</span>
           </button>
         </div>
       </div>
-
     </div>
   );
 };

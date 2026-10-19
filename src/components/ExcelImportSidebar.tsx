@@ -59,8 +59,7 @@ export const ExcelImportSidebar: React.FC<ExcelImportSidebarProps> = ({
     capacity: 'Capacity',
     material: 'Material',
     labour: 'Labour',
-    qty: 'QTY',
-    remarks: 'Remarks'
+    qty: 'QTY'
   };
 
   const [mappings, setMappings] = useState<ColumnMappingConfig>(defaultMappings);
@@ -295,11 +294,6 @@ export const ExcelImportSidebar: React.FC<ExcelImportSidebarProps> = ({
           <div className="flex items-center justify-between p-1 bg-slate-50 rounded border border-slate-200">
             <span className="text-slate-600">Qty</span>
             <span className="font-medium text-blue-700">{mappings.qty}</span>
-          </div>
-
-          <div className="flex items-center justify-between p-1 bg-slate-50 rounded border border-slate-200">
-            <span className="text-slate-600">Remarks</span>
-            <span className="font-medium text-blue-700">{mappings.remarks}</span>
           </div>
         </div>
 

@@ -1,5 +1,13 @@
 import * as XLSX from 'xlsx';
-import { PerformaRecord, MaintenanceItemRow, BillSheetDefinition, BillItem, LocationWorkbook } from '../types/performa';
+import {
+  PerformaRecord,
+  BillSheetDefinition,
+  BillItem,
+  LocationWorkbook,
+  ensureCompleteMasterItems,
+  isNonZeroQtyValue,
+  computeSummaryQtyFromSizes
+} from '../types/performa';
 
 /**
  * Exact Column Specification for DOLVAN INVENTERY.xlsx -> Sheet1 (43 columns)
@@ -116,50 +124,73 @@ export function buildDolvanSheet1Merges(): XLSX.Range[] {
 }
 
 /**
- * Creates the exact pre-populated sample performa record matching Row 3 of DOLVAN INVENTERY.xlsx
- * Location: "JAY GANESH PLOT NO:-5733", TC Serial: 52, Make: JAYESH, Capacity: 200 KVA
+ * Creates the sample performa record matching Row 3 of DOLVAN INVENTERY.xlsx
+ * Location: "JAY GANESH PLOT NO:-5733", TC Serial: 52, Make: Aman, Capacity: 200 KVA
  */
 export function createDolvanSamplePerforma(customLocation: string = 'JAY GANESH PLOT NO:-5733'): PerformaRecord {
+  const baseItems = ensureCompleteMasterItems([]);
+
+  const applySample = (
+    srLabel: string,
+    qty: number | string,
+    sizeQtys?: Record<string, number | string>,
+    mat: boolean = true,
+    lab: boolean = true
+  ) => {
+    const row = baseItems.find(r => r.srLabel === srLabel);
+    if (row) {
+      row.materialYes = mat;
+      row.labourYes = lab;
+      if (sizeQtys && row.sizeFields) {
+        row.sizeQtys = { ...(row.sizeQtys || {}), ...sizeQtys };
+        row.qty = computeSummaryQtyFromSizes(row.sizeFields, row.sizeQtys, qty);
+      } else {
+        row.qty = qty;
+      }
+    }
+  };
+
+  applySample('2', 1);
+  applySample('2.1', 3);
+  applySample('3', 1);
+  applySample('4', '6m', { 'Nos.': 1, 'C-1(70)': '', 'C-2(150)': 6 });
+  applySample('5', 1);
+  applySample('6', 2, { '25': '', '50': '', '70': 2 });
+  applySample('6.1', 6, { '95': '', '120': '', '150': 6 });
+  applySample('6.2', 2, { '185': 2 });
+  applySample('7', '', undefined, true, true);
+  applySample('8', 1);
+  applySample('10', 1, { '100Amp': 1, '200Amp': '' });
+  applySample('11', 3, { '630 amp': '', '400 amp': '', '250 amp': 3 });
+  applySample('12', 3, { '630 amp': '', '400 amp': '', '250 amp': 3 });
+  applySample('13', 3);
+  applySample('14', 1);
+  applySample('15', 1);
+  applySample('16', 4, { '12MM': 1, '20MM': '', '30MM': 3 });
+
   return {
     id: 'DOL-001',
-    date: '18-8-26',
+    date: '2026-09-18',
     location: customLocation,
     transformerRefNo: 'TR-DOLVAN-52',
-    transformerMake: 'JAYESH',
+    transformerMake: 'Aman',
     transformerSerialNo: '52',
     capacity: '200',
+    division: 'ANKLESHWAR IND DIVISION',
+    subDivision: 'ANKLESHWAR GIDC SDN',
+    performaNo: 'DOL-001',
+    workOrderNo: 'WO/DGVCL/DLV/2026/772',
+    serviceOrderNo: 'SO/DGVCL/GIDC/2026/104',
     measurements: {
-      voltageRN: '230',
+      voltageRN: '234',
       voltageYN: '235',
       voltageBN: '232',
-      ampereR: '15',
-      ampereY: '18',
-      ampereB: '14',
-      ampereN: '0'
+      ampereR: '99',
+      ampereY: '72',
+      ampereB: '85',
+      ampereN: '42'
     },
-    items: [
-      { id: 'it-1', srNo: 1, subIndex: 1, description: 'Replacement of LT bushing Got/Rubber Washer', unit: 'Nos.', materialYes: false, labourYes: false, qty: 0, remarks: '' },
-      { id: 'it-2', srNo: 1, subIndex: 2, description: 'Replacement of HT bushing Got/Rubber Washer', unit: 'Nos.', materialYes: false, labourYes: false, qty: 0, remarks: '' },
-      { id: 'it-3', srNo: 2, subIndex: 1, description: 'Providing of half stud on LT side', unit: 'Nos.', materialYes: true, labourYes: true, qty: 1, remarks: '20 MM Half Stud' },
-      { id: 'it-4', srNo: 2, subIndex: 2, description: 'Providing of AL Patta on LT side', unit: 'Nos.', materialYes: true, labourYes: true, qty: 3, remarks: '200 KVA Patta' },
-      { id: 'it-5', srNo: 3, subIndex: 1, description: 'Check and Tight earth Connection', unit: 'Nos.', materialYes: false, labourYes: true, qty: 1, remarks: 'Tightened' },
-      { id: 'it-6', srNo: 4, subIndex: 1, description: 'Replacement of damage LT cable with new one of right capacity', unit: 'LS', materialYes: true, labourYes: true, qty: 6, remarks: 'C-2(150)' },
-      { id: 'it-7', srNo: 5, subIndex: 1, description: 'Providing of termination in form of RYB And N core including PVC tape', unit: 'Nos.', materialYes: true, labourYes: true, qty: 1, remarks: '' },
-      { id: 'it-8', srNo: 6, subIndex: 1, description: 'Termination of 25/50/70 Sq mm cable', unit: 'Nos.', materialYes: true, labourYes: true, qty: 2, remarks: '' },
-      { id: 'it-9', srNo: 6, subIndex: 2, description: 'Termination of 95/120/150 Sq mm cable', unit: 'Nos.', materialYes: true, labourYes: true, qty: 6, remarks: '' },
-      { id: 'it-10', srNo: 6, subIndex: 3, description: 'Termination of 185 Sq mm cable', unit: 'Nos.', materialYes: true, labourYes: true, qty: 2, remarks: '' },
-      { id: 'it-11', srNo: 7, subIndex: 1, description: 'Check Oil leakage and Top up of Oil (oil provide by DGVCL)', unit: 'Nos.', materialYes: true, labourYes: true, qty: 1, remarks: '1 Ltr' },
-      { id: 'it-12', srNo: 8, subIndex: 1, description: 'Measurement of Voltage and Ampere', unit: 'Nos.', materialYes: true, labourYes: true, qty: 1, remarks: 'Completed' },
-      { id: 'it-13', srNo: 9, subIndex: 1, description: 'fixing new box with complete wiring', unit: 'Nos.', materialYes: false, labourYes: false, qty: 0, remarks: '' },
-      { id: 'it-14', srNo: 10, subIndex: 1, description: 'Checking and Replacement of Kit-Ket fuse (100Amp)', unit: 'Nos.', materialYes: true, labourYes: true, qty: 1, remarks: '' },
-      { id: 'it-15', srNo: 11, subIndex: 3, description: '250 amp HRC fuse base', unit: 'Nos.', materialYes: true, labourYes: true, qty: 3, remarks: '' },
-      { id: 'it-16', srNo: 12, subIndex: 3, description: '250 amp HRC fuse Link', unit: 'Nos.', materialYes: true, labourYes: true, qty: 3, remarks: '' },
-      { id: 'it-17', srNo: 14, subIndex: 1, description: 'Providing and replacement of sundry items like nut, bolt, washer etc.', unit: 'LS', materialYes: true, labourYes: true, qty: 3, remarks: '' },
-      { id: 'it-18', srNo: 15, subIndex: 1, description: 'General Condition Cleaning, Clamping and Proforam forment', unit: 'JOB', materialYes: true, labourYes: true, qty: 1, remarks: 'OK' },
-      { id: 'it-19', srNo: 16, subIndex: 1, description: 'LT side Brass Nut 12MM', unit: 'Nos.', materialYes: true, labourYes: true, qty: 1, remarks: '' },
-      { id: 'it-20', srNo: 16, subIndex: 3, description: 'LT side Brass Nut 30MM', unit: 'Nos.', materialYes: true, labourYes: true, qty: 3, remarks: '' },
-      { id: 'it-21', srNo: 18, subIndex: 1, description: 'breather', unit: 'Nos.', materialYes: false, labourYes: false, qty: 0, remarks: '' }
-    ],
+    items: baseItems,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     status: 'saved'
@@ -169,10 +200,10 @@ export function createDolvanSamplePerforma(customLocation: string = 'JAY GANESH 
 /**
  * Creates the default Bill Sheet for a Location Excel workbook
  */
-export function createDefaultBillSheet(locationName: string): BillSheetDefinition {
+export function createDefaultBillSheet(_locationName: string): BillSheetDefinition {
   const items: BillItem[] = [
     { id: 'b-1', srNo: 1, description: 'Providing LT side AL. Patta (200 KVA)', unit: 'Nos.', qty: 3, rate: 350, labourRate: 80, materialAmount: 1050, labourAmount: 240, totalAmount: 1290, remarks: '200 KVA' },
-    { id: 'b-2', srNo: 2, description: 'Check & Tight Earth Connection', unit: 'Nos.', qty: 1, rate: 0, labourRate: 150, materialAmount: 0, labourAmount: 150, totalAmount: 150, remarks: 'Completed' },
+    { id: 'b-2', srNo: 2, description: 'Check & Tight Earth Connection', unit: 'Nos.', qty: 1, rate: 0, labourRate: 150, materialAmount: 0, labourRateAmount: 150, labourAmount: 150, totalAmount: 150, remarks: 'Completed' } as any,
     { id: 'b-3', srNo: 3, description: 'Replacement of damaged LT cable (C-2 150 sq mm)', unit: 'Mtr', qty: 6, rate: 450, labourRate: 100, materialAmount: 2700, labourAmount: 600, totalAmount: 3300, remarks: '6 Meters' },
     { id: 'b-4', srNo: 4, description: 'Providing of new termination in form of RYBN core', unit: 'Nos.', qty: 1, rate: 250, labourRate: 90, materialAmount: 250, labourAmount: 90, totalAmount: 340, remarks: 'PVC Tape' },
     { id: 'b-5', srNo: 5, description: 'Providing of cable termination (70 sq mm)', unit: 'Nos.', qty: 2, rate: 120, labourRate: 60, materialAmount: 240, labourAmount: 120, totalAmount: 360, remarks: '2 Ends' },
@@ -192,7 +223,7 @@ export function createDefaultBillSheet(locationName: string): BillSheetDefinitio
     name: 'bill',
     billNumber: `BILL-${new Date().getFullYear()}-001`,
     billDate: new Date().toISOString().slice(0, 10),
-    contractorName: 'DGVCL Authorized Electrical Maintenance Contractor',
+    contractorName: 'SHIV ELECTRICALS - DGVCL Authorized Maintenance Contractor',
     workOrderRef: `WO/DGVCL/DLV/${new Date().getFullYear()}/772`,
     items,
     subTotal,
@@ -202,63 +233,100 @@ export function createDefaultBillSheet(locationName: string): BillSheetDefinitio
 }
 
 /**
- * Maps a single Performa record to the canonical 43-column DOLVAN array
+ * Maps a single Performa record (including sizeQtys) to the canonical 43-column DOLVAN array
  */
 export function mapPerformaToDolvanRow(performa: PerformaRecord, index: number): (string | number)[] {
-  const items = performa.items || [];
-  const findQty = (subStr: string): number | string => {
-    const it = items.find(i => i.description.toLowerCase().includes(subStr.toLowerCase()));
+  const items = ensureCompleteMasterItems(performa.items || []);
+
+  const parseVal = (raw: number | string | undefined | null): number | string => {
+    if (!isNonZeroQtyValue(raw)) return '';
+    const str = String(raw).trim();
+    const n = Number(str);
+    return !isNaN(n) ? n : str;
+  };
+
+  const getRowBySr = (srLabel: string) => items.find(i => i.srLabel === srLabel);
+
+  const getSingleQty = (srLabel: string): number | string => {
+    const it = getRowBySr(srLabel);
     if (!it) return '';
-    const q = Number(it.qty);
-    if (!isNaN(q) && q > 0) return q;
+    const parsed = parseVal(it.qty);
+    if (parsed !== '') return parsed;
     if (it.materialYes || it.labourYes) return 1;
     return '';
   };
 
+  const getSizeQty = (srLabel: string, sizeKey: string): number | string => {
+    const it = getRowBySr(srLabel);
+    if (!it) return '';
+    if (it.sizeQtys && isNonZeroQtyValue(it.sizeQtys[sizeKey])) {
+      return parseVal(it.sizeQtys[sizeKey]);
+    }
+    return '';
+  };
+
+  const getCombinedSizesQty = (srLabel: string, sizeKeys: string[]): number | string => {
+    const it = getRowBySr(srLabel);
+    if (!it) return '';
+    if (it.sizeQtys) {
+      let sum = 0;
+      let hasAny = false;
+      for (const k of sizeKeys) {
+        if (isNonZeroQtyValue(it.sizeQtys[k])) {
+          hasAny = true;
+          const n = Number(it.sizeQtys[k]);
+          if (!isNaN(n)) sum += n;
+        }
+      }
+      if (hasAny) return sum > 0 ? sum : parseVal(it.qty);
+    }
+    return parseVal(it.qty);
+  };
+
   return [
-    index + 1,                                            // 0: SR NO
-    performa.date || '18-8-26',                           // 1: DATE
-    performa.location || '',                              // 2: Location of TC
-    performa.transformerSerialNo || '',                   // 3: TC Serial Number.
-    performa.transformerMake || '',                       // 4: TC Make
-    performa.capacity || '',                              // 5: TC Capacity
-    findQty('ht bushing'),                                // 6: Bushing goti HT
-    findQty('lt bushing'),                                // 7: Bushing goti LT
-    findQty('al patta 100'),                              // 8: AL. Patta 100
-    findQty('al patta') || findQty('al. patta') || 3,     // 9: AL. Patta 200
-    findQty('al patta 500'),                              // 10: AL. Patta 500
-    findQty('earth connection') || 1,                     // 11: Earth Connection
-    findQty('damage lt cable') || 1,                      // 12: LT cable Nos.
-    findQty('70 sq mm cable'),                            // 13: C- 1(70)
-    findQty('150 sq mm cable') || 6,                      // 14: C- 2(150)
-    findQty('r,y,b and n core') || 1,                     // 15: Termination RYBN
-    findQty('25/50/70') || 2,                             // 16: Termination 70
-    findQty('95/120/150') || 6,                           // 17: Termination 150
-    findQty('185 sq mm') || 2,                            // 18: Termination 185
-    findQty('240 sq mm'),                                 // 19: Termination 240
-    findQty('oil leakage') || 1,                          // 20: Oil leakage
-    0,                                                    // 21: Oil Ltr
-    findQty('new box above 100') || 1,                    // 22: Dist Box
-    findQty('kit-ket fuse (100amp)') || 1,                // 23: Kit-Kat 100
-    findQty('kit-ket fuse (200amp)'),                     // 24: Kit-Kat 200
-    findQty('630 amp hrc fuse base'),                     // 25: HRC Base 630
-    findQty('400 amp hrc fuse base'),                     // 26: HRC Base 400
-    findQty('250 amp hrc fuse base') || 3,                // 27: HRC Base 250
-    findQty('630 amp hrc fuse link'),                     // 28: HRC Link 630
-    findQty('400 amp hrc fuse link'),                     // 29: HRC Link 400
-    findQty('250 amp hrc fuse link') || 3,                // 30: HRC Link 250
-    findQty('fuse element') || 3,                         // 31: Fuse element D.O.
-    findQty('sundry items') || 1,                         // 32: Sundry items
-    1,                                                    // 33: General Condition
-    findQty('brass nut 12mm') || 1,                       // 34: Brass Nut 12mm
-    findQty('brass nut 20mm'),                            // 35: Brass Nut 20mm
-    findQty('brass nut 30mm') || 3,                       // 36: Brass Nut 30mm
-    findQty('brass washer 12mm'),                         // 37: Brass Washer 12mm
-    findQty('brass washer 20mm'),                         // 38: Brass Washer 20mm
-    findQty('brass washer 30mm'),                         // 39: Brass Washer 30mm
-    findQty('breather'),                                  // 40: Breather
-    findQty('half stud 12mm'),                            // 41: HALF STUD 12 MM
-    findQty('half stud') || 1                             // 42: HALF STUD 20 MM
+    index + 1,                                                       // 0: SR NO
+    performa.date || '2026-09-18',                                   // 1: DATE
+    performa.location || '',                                         // 2: Location of TC
+    performa.transformerSerialNo || '',                              // 3: TC Serial Number.
+    performa.transformerMake || '',                                  // 4: TC Make
+    performa.capacity || '',                                         // 5: TC Capacity
+    getSingleQty('1.1'),                                             // 6: Bushing goti HT
+    getSingleQty('1'),                                               // 7: Bushing goti LT
+    '',                                                              // 8: AL. Patta 100
+    getSingleQty('2.1'),                                             // 9: AL. Patta 200
+    '',                                                              // 10: AL. Patta 500
+    getSingleQty('3'),                                               // 11: Earth Connection
+    getSizeQty('4', 'Nos.'),                                         // 12: LT cable Nos.
+    getSizeQty('4', 'C-1(70)'),                                      // 13: C- 1(70)
+    getSizeQty('4', 'C-2(150)'),                                     // 14: C- 2(150)
+    getSingleQty('5'),                                               // 15: Termination RYBN
+    getCombinedSizesQty('6', ['25', '50', '70']),                    // 16: Termination 70 (25/50/70)
+    getCombinedSizesQty('6.1', ['95', '120', '150']),                // 17: Termination 150 (95/120/150)
+    getSizeQty('6.2', '185') || getSingleQty('6.2'),                 // 18: Termination 185
+    '',                                                              // 19: Termination 240
+    getSingleQty('7'),                                               // 20: Oil leakage
+    0,                                                               // 21: Oil Ltr
+    getCombinedSizesQty('9.1', ['Up to 100 Amp', 'Above 100 Amp']) || getSingleQty('9'), // 22: Dist Box
+    getSizeQty('10', '100Amp'),                                      // 23: Kit-Kat 100
+    getSizeQty('10', '200Amp'),                                      // 24: Kit-Kat 200
+    getSizeQty('11', '630 amp'),                                     // 25: HRC Base 630
+    getSizeQty('11', '400 amp'),                                     // 26: HRC Base 400
+    getSizeQty('11', '250 amp'),                                     // 27: HRC Base 250
+    getSizeQty('12', '630 amp'),                                     // 28: HRC Link 630
+    getSizeQty('12', '400 amp'),                                     // 29: HRC Link 400
+    getSizeQty('12', '250 amp'),                                     // 30: HRC Link 250
+    getSingleQty('13'),                                              // 31: Fuse element D.O.
+    getSingleQty('14'),                                              // 32: Sundry items
+    getSingleQty('15') || 1,                                         // 33: General Condition
+    getSizeQty('16', '12MM'),                                        // 34: Brass Nut 12mm
+    getSizeQty('16', '20MM'),                                        // 35: Brass Nut 20mm
+    getSizeQty('16', '30MM'),                                        // 36: Brass Nut 30mm
+    getSizeQty('17', '12MM'),                                        // 37: Brass Washer 12mm
+    getSizeQty('17', '20MM'),                                        // 38: Brass Washer 20mm
+    getSizeQty('17', '30MM'),                                        // 39: Brass Washer 30mm
+    getSingleQty('18'),                                              // 40: Breather
+    '',                                                              // 41: HALF STUD 12 MM
+    getSingleQty('2')                                                // 42: HALF STUD 20 MM
   ];
 }
 
@@ -272,11 +340,9 @@ export function buildDolvanSheet1Worksheet(performas: PerformaRecord[]): XLSX.Wo
 
   const dataRows = performas.map((p, idx) => mapPerformaToDolvanRow(p, idx));
 
-  // Assemble full table: 3 header rows + data rows
   const aoa = [headerRow1, headerRow2, headerRow3, ...dataRows];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-  // Apply Merges & Widths
   ws['!merges'] = buildDolvanSheet1Merges();
   ws['!cols'] = DOLVAN_SHEET1_COLUMNS.map(c => ({ wch: c.width }));
   ws['!rows'] = [
@@ -300,7 +366,7 @@ export function buildBillWorksheet(billData?: BillSheetDefinition): XLSX.WorkShe
     ['Bill No:', b.billNumber, '', 'Date:', b.billDate],
     ['Contractor:', b.contractorName, '', 'Work Order:', b.workOrderRef],
     [],
-    ['SR NO', 'DESCRIPTION OF ITEM / WORK', 'UNIT', 'QUANTITY', 'MATERIAL RATE (₹)', 'LABOUR RATE (₹)', 'MATERIAL AMT (₹)', 'LABOUR AMT (₹)', 'TOTAL AMOUNT (₹)', 'REMARKS']
+    ['SR NO', 'DESCRIPTION OF ITEM / WORK', 'UNIT', 'QUANTITY', 'MATERIAL RATE (₹)', 'LABOUR RATE (₹)', 'MATERIAL AMT (₹)', 'LABOUR AMT (₹)', 'TOTAL AMOUNT (₹)']
   ];
 
   b.items.forEach((item, idx) => {
@@ -313,8 +379,7 @@ export function buildBillWorksheet(billData?: BillSheetDefinition): XLSX.WorkShe
       item.labourRate,
       item.materialAmount,
       item.labourAmount,
-      item.totalAmount,
-      item.remarks || ''
+      item.totalAmount
     ]);
   });
 
@@ -333,8 +398,7 @@ export function buildBillWorksheet(billData?: BillSheetDefinition): XLSX.WorkShe
     { wch: 18 },
     { wch: 18 },
     { wch: 18 },
-    { wch: 20 },
-    { wch: 25 }
+    { wch: 20 }
   ];
 
   return ws;
@@ -346,18 +410,15 @@ export function buildBillWorksheet(billData?: BillSheetDefinition): XLSX.WorkShe
 export function exportDualSheetLocationExcel(workbook: LocationWorkbook): string {
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: inventory (DOLVAN INVENTERY layout)
   const inventorySheetDef = workbook.sheets['inventory'] || workbook.sheets['Performas'];
   const performas = inventorySheetDef?.performas || [];
   const wsInventory = buildDolvanSheet1Worksheet(performas);
   XLSX.utils.book_append_sheet(wb, wsInventory, 'inventory');
 
-  // Sheet 2: bill
   const billSheetDef = workbook.sheets['bill'];
   const wsBill = buildBillWorksheet(billSheetDef?.billData);
   XLSX.utils.book_append_sheet(wb, wsBill, 'bill');
 
-  // Download
   const cleanLoc = (workbook.locationName || 'LOCATION').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
   const fileName = `${cleanLoc}_INVENTORY_BILL.xlsx`;
   XLSX.writeFile(wb, fileName);
@@ -370,7 +431,7 @@ export function exportDualSheetLocationExcel(workbook: LocationWorkbook): string
 export function exportDolvanReferenceExcel(
   performas: PerformaRecord[],
   locationName: string = 'DOLVAN',
-  mode: 'sheet1_only' | 'full_workbook' = 'sheet1_only'
+  _mode: 'sheet1_only' | 'full_workbook' = 'sheet1_only'
 ): string {
   const wb = XLSX.utils.book_new();
   const wsSheet1 = buildDolvanSheet1Worksheet(performas);

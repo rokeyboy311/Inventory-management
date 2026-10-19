@@ -142,139 +142,6 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
         )}
       </div>
 
-      {/* TRANSFORMER WORK REPORT METADATA EXPANDABLE PANEL (For Rudra Electrical Format) */}
-      {activePreset === 'rudra_18' && reportMeta && (
-        <div className="border-b border-slate-800 bg-slate-950/70 p-4 sm:p-5">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <Building2 className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide uppercase flex items-center gap-2">
-                  <span>RUDRA ELECTRICAL — Work Report Header Details</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono normal-case">
-                    PDF Performa
-                  </span>
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  Work Order, Transformer Rating, Make, Serial No. &amp; Division Info
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsReportMetaExpanded(!isReportMetaExpanded)}
-              className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900 transition cursor-pointer"
-            >
-              {isReportMetaExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          </div>
-
-          {isReportMetaExpanded && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4 text-xs">
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Work Description:</label>
-                <input
-                  type="text"
-                  value={reportMeta.workName || ''}
-                  onChange={(e) => handleMetaFieldChange('workName', e.target.value)}
-                  placeholder="Transformer Maintenance Work"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Division / Sub-division:</label>
-                <input
-                  type="text"
-                  value={reportMeta.division || ''}
-                  onChange={(e) => handleMetaFieldChange('division', e.target.value)}
-                  placeholder="O&M Sub-Division"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">W.O. Number &amp; Date:</label>
-                <input
-                  type="text"
-                  value={reportMeta.workOrderNo || ''}
-                  onChange={(e) => handleMetaFieldChange('workOrderNo', e.target.value)}
-                  placeholder="W.O./TRANS/2026/089"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Transformer Capacity (KVA):</label>
-                <select
-                  value={reportMeta.transformerRating || '100 KVA'}
-                  onChange={(e) => handleMetaFieldChange('transformerRating', e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="10 KVA">10 KVA</option>
-                  <option value="16 KVA">16 KVA</option>
-                  <option value="25 KVA">25 KVA</option>
-                  <option value="63 KVA">63 KVA</option>
-                  <option value="100 KVA">100 KVA</option>
-                  <option value="160 KVA">160 KVA</option>
-                  <option value="200 KVA">200 KVA</option>
-                  <option value="250 KVA">250 KVA</option>
-                  <option value="315 KVA">315 KVA</option>
-                  <option value="500 KVA">500 KVA</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Make / Manufacturer:</label>
-                <input
-                  type="text"
-                  value={reportMeta.transformerMake || ''}
-                  onChange={(e) => handleMetaFieldChange('transformerMake', e.target.value)}
-                  placeholder="Voltamp / Crompton"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Serial Number (Sr. No.):</label>
-                <input
-                  type="text"
-                  value={reportMeta.transformerSerialNo || ''}
-                  onChange={(e) => handleMetaFieldChange('transformerSerialNo', e.target.value)}
-                  placeholder="TR-78420-GUJ"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Voltage Ratio:</label>
-                <input
-                  type="text"
-                  value={reportMeta.voltageRatio || '11 / 0.433 kV'}
-                  onChange={(e) => handleMetaFieldChange('voltageRatio', e.target.value)}
-                  placeholder="11 / 0.433 kV"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Performa / Report No:</label>
-                <input
-                  type="text"
-                  value={reportMeta.reportNo || ''}
-                  onChange={(e) => handleMetaFieldChange('reportNo', e.target.value)}
-                  placeholder="RE/TR/101"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-500"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Table Title & Quick Tools Bar */}
       <div className="px-5 py-3.5 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center space-x-2.5">
@@ -283,12 +150,10 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
           </div>
           <div>
             <h2 className="text-sm font-bold text-white tracking-wide">
-              {activePreset === 'rudra_18' ? '18 Items Work & Material Schedule (Rudra Performa)' : 'Dynamic Inventory Material Entry Table'}
+              {activePreset === 'rudra_18' ? '18-Group / 33-Item Master Maintenance Schedule' : 'Dynamic Inventory Material Entry Table'}
             </h2>
             <p className="text-[11px] text-slate-400">
-              {activePreset === 'rudra_18' 
-                ? 'Enter quantity used and specification / selected options for each maintenance task'
-                : `Tailored input fields per material specifications (${itemDefinitions.length} active rows)`}
+              Tap 1-Click Chips [1] [2] [3] [4] [6] [8] or enter quantity directly
             </p>
           </div>
         </div>
@@ -314,7 +179,7 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
             title="Pre-populate realistic site inventory values for rapid testing"
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden sm:inline">Quick Fill Demo</span>
+            <span className="hidden sm:inline">⚡ 1-Click Routine Fill</span>
           </button>
 
           <button
@@ -331,7 +196,7 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
             type="button"
             onClick={onOpenAddCustomItem}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition shadow-md shadow-emerald-950/50 cursor-pointer"
-            title="Add a custom dynamic row (Input Only, Dropdown Only, or Dual with Sub-Options)"
+            title="Add a custom dynamic row"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>+ Add Row</span>
@@ -411,22 +276,54 @@ export const DynamicInventoryForm: React.FC<DynamicInventoryFormProps> = ({
 
                   {/* Column 2: Input Field(s) tailored to layout design */}
                   <div className="lg:col-span-8">
-                    {/* Case 1: Input Only (e.g. Power, Earth Compaction, Box) */}
+                    {/* Case 1: Input Only (with 1-Tap Quick Chips [1][2][3][4][6][8][+][×]) */}
                     {isInputOnly && (
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={currentEntry.value !== undefined ? currentEntry.value : ''}
-                          onChange={(e) => onValueChange(itemDef.id, 'value', e.target.value)}
-                          placeholder={itemDef.inputPlaceholder || 'Enter'}
-                          className="w-full bg-slate-900 border border-slate-700 hover:border-slate-600 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition shadow-inner font-medium"
-                        />
-                        {itemDef.defaultValue !== undefined && String(currentEntry.value) === String(itemDef.defaultValue) && (
-                          <div className="absolute right-3 top-2.5 text-[11px] text-emerald-400 font-mono flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>[set by def.]</span>
-                          </div>
-                        )}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <div className="flex items-center gap-1 shrink-0">
+                          {[1, 2, 3, 4, 6, 8].map(qNum => (
+                            <button
+                              key={qNum}
+                              type="button"
+                              onClick={() => onValueChange(itemDef.id, 'value', qNum)}
+                              className={`w-7 h-7 rounded-lg text-xs font-mono font-bold border transition cursor-pointer ${
+                                String(currentEntry.value) === String(qNum)
+                                  ? 'bg-[#00ffaa] text-[#111113] border-[#00ffaa]'
+                                  : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-[#00ffaa]'
+                              }`}
+                            >
+                              {qNum}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => onValueChange(itemDef.id, 'value', (Number(currentEntry.value) || 0) + 1)}
+                            className="w-7 h-7 rounded-lg text-xs font-mono font-bold bg-slate-900 text-cyan-400 border border-slate-700 hover:border-cyan-400 cursor-pointer"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onValueChange(itemDef.id, 'value', '')}
+                            className="w-7 h-7 rounded-lg text-xs font-mono font-bold bg-slate-900 text-rose-400 border border-slate-700 hover:border-rose-400 cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={currentEntry.value !== undefined ? currentEntry.value : ''}
+                            onChange={(e) => onValueChange(itemDef.id, 'value', e.target.value)}
+                            placeholder={itemDef.inputPlaceholder || 'Enter Qty'}
+                            className="w-full bg-slate-900 border border-slate-700 hover:border-slate-600 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition shadow-inner font-mono font-bold"
+                          />
+                          {itemDef.defaultValue !== undefined && String(currentEntry.value) === String(itemDef.defaultValue) && (
+                            <div className="absolute right-3 top-2 text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>[def]</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 

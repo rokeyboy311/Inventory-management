@@ -310,8 +310,8 @@ export function App() {
     setActiveSheetName('inventory');
     await saveWorkbookToStorage(newWb);
 
-    // Initial performa starts with sample data row
-    const sample = newWb.sheets['inventory']?.performas[0] || createBlankPerforma('DOL-001', locationName);
+    // Initial performa starts with sample data row (Location of Transformer kept separate)
+    const sample = newWb.sheets['inventory']?.performas[0] || createBlankPerforma('DOL-001', '');
     setCurrentPerforma(sample);
     setOriginalEditingId(sample.id);
     initHistory(sample);
@@ -428,7 +428,7 @@ export function App() {
     }
   };
 
-  // Action: Save & Add Another (Continuous Entry)
+  // Action: Save & Add Another (Continuous Entry with Sticky Date Memory)
   const handleSaveAndAddAnother = () => {
     const normalizedId = normalizePerformaIdInput(
       currentPerforma.id,
@@ -445,22 +445,22 @@ export function App() {
     ]);
 
     const nextId = getNextPerformaId(updatedPerformas, activeWorkbook.locationName);
-    const freshPerforma = createBlankPerforma(nextId, updatedRec.location || '');
-    freshPerforma.date = updatedRec.date;
+    // Retain Sticky Date, clear Location, Make, Serial, Capacity, and all 33 rows
+    const freshPerforma = createBlankPerforma(nextId, '', updatedRec.date);
 
     setCurrentPerforma(freshPerforma);
     setOriginalEditingId(null);
     setDuplicateError(null);
     initHistory(freshPerforma);
 
-    showNotification(`Performa ${normalizedId} saved to Excel! Now entering ${nextId}`, 'info');
+    showNotification(`Performa ${normalizedId} saved to Excel! Ready for next entry (${nextId})`, 'info');
   };
 
   // Action: + Add New Performa
   const handleStartNewPerforma = () => {
     if (!activeWorkbook) return;
     const nextId = getNextPerformaId(activePerformas, activeWorkbook.locationName);
-    const fresh = createBlankPerforma(nextId, '');
+    const fresh = createBlankPerforma(nextId, '', currentPerforma.date);
     setCurrentPerforma(fresh);
     setOriginalEditingId(null);
     setDuplicateError(null);
@@ -892,31 +892,15 @@ export function App() {
             {mainViewTab === 'form' ? (
               <A4PerformaDocument
                 performa={currentPerforma}
-                existingPerformas={activePerformas}
-                locationName={activeWorkbook?.locationName || 'Dolvan'}
+                allPerformas={activePerformas}
                 onChange={handlePerformaChange}
-                onSelectExistingPerforma={(matchedRec) => {
-                  setCurrentPerforma(JSON.parse(JSON.stringify(matchedRec)));
-                  setOriginalEditingId(matchedRec.id);
-                  setDuplicateError(null);
-                  initHistory(matchedRec);
-                }}
-                onStartNewWithId={(typedId) => {
-                  // If user was editing an existing record and typed a brand-new ID, switch to new record mode with blank form so they don't overwrite the old record
-                  if (originalEditingId && originalEditingId.trim().toLowerCase() !== typedId.trim().toLowerCase()) {
-                    const fresh = createBlankPerforma(typedId, currentPerforma.location || '');
-                    fresh.date = currentPerforma.date;
-                    setCurrentPerforma(fresh);
-                    setOriginalEditingId(null);
-                    setDuplicateError(null);
-                  } else {
-                    setOriginalEditingId(null);
-                  }
-                }}
                 onSaveAndAddAnother={handleSaveAndAddAnother}
                 onSaveAndClose={handleSaveAndClose}
                 onDelete={() => handleDeletePerforma(currentPerforma.id)}
                 isExisting={!!originalEditingId}
+                excelRowPosition={
+                  currentIndex >= 0 ? currentIndex + 1 : activePerformas.length + 1
+                }
                 duplicateError={duplicateError}
                 onClearDuplicateError={() => setDuplicateError(null)}
                 viewMode={viewMode}

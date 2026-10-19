@@ -348,7 +348,7 @@ export async function deleteTeamFromStorage(teamId: string): Promise<void> {
 export function createNewLocationWorkbookWithDualSheets(locationName: string, teamId: string = 'team-dolvan-maintenance'): LocationWorkbook {
   const cleanLoc = locationName.trim();
   const id = cleanLoc.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'loc';
-  const samplePerforma = createDolvanSamplePerforma(cleanLoc);
+  const samplePerforma = createDolvanSamplePerforma();
   const defaultBill = createDefaultBillSheet(cleanLoc);
 
   return optimizeWorkbookForStorage({

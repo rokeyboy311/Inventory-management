@@ -263,42 +263,55 @@ export const ReadingsView: React.FC<ReadingsViewProps> = ({
             </div>
           </div>
 
-          {/* Voltages RN, YN, BN */}
+          {/* Voltages RN, YN, BN with 1-Click Normal Preset */}
           <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-            <span className="text-[11px] font-bold text-amber-400 font-mono tracking-wide uppercase">
-              Phase-to-Neutral AC Voltages (V)
-            </span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-bold text-amber-400 font-mono tracking-wide uppercase">
+                Phase-to-Neutral AC Voltages (V)
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setVoltageRN('234');
+                  setVoltageYN('235');
+                  setVoltageBN('232');
+                }}
+                className="px-2.5 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold cursor-pointer"
+              >
+                ⚡ Auto-Fill Normal Voltage (234 / 235 / 232)
+              </button>
+            </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="text-[11px] text-slate-400">Voltage RN</label>
+                <label className="text-[11px] text-slate-400">Voltage R-N</label>
                 <input
                   type="number"
                   step="0.1"
                   value={voltageRN}
                   onChange={(e) => setVoltageRN(e.target.value)}
-                  placeholder="240"
+                  placeholder="234"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-400">Voltage YN</label>
+                <label className="text-[11px] text-slate-400">Voltage Y-N</label>
                 <input
                   type="number"
                   step="0.1"
                   value={voltageYN}
                   onChange={(e) => setVoltageYN(e.target.value)}
-                  placeholder="240"
+                  placeholder="235"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-400">Voltage BN</label>
+                <label className="text-[11px] text-slate-400">Voltage B-N</label>
                 <input
                   type="number"
                   step="0.1"
                   value={voltageBN}
                   onChange={(e) => setVoltageBN(e.target.value)}
-                  placeholder="240"
+                  placeholder="232"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
                 />
               </div>
