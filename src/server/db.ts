@@ -24,6 +24,9 @@ import {
   InventorySubmission,
   InventoryItemValue
 } from '../types/inventory.js';
+import { Team } from '../types/team.js';
+import { LocationWorkbook } from '../types/performa.js';
+import { createDolvanSamplePerforma, createDefaultBillSheet } from '../utils/dolvanTemplate.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +45,8 @@ export interface DatabaseSchema {
   fileRegistry: FileRegistryRecord[];
   auditLogs: AuditLogRecord[];
   bills: BillRecord[];
+  teams?: Team[];
+  workbooks?: LocationWorkbook[];
 }
 
 function ensureDataDir() {
@@ -593,6 +598,67 @@ function createInitialSeedData(): DatabaseSchema {
     }
   ];
 
+  const defaultTeams: Team[] = [
+    {
+      id: 'team-dolvan-maintenance',
+      name: 'Dolvan Maintenance Team',
+      code: 'DLV-01',
+      division: 'VYARA',
+      subdivision: 'DOLVAN',
+      inChargeEngineer: {
+        name: 'Er. R. K. Patel',
+        designation: 'Deputy Executive Engineer',
+        contactNumber: '+91 98250 12345',
+        email: 'rkpatel@dgvcl.co.in'
+      },
+      members: ['Kishan Kumar', 'Ramesh Bhai', 'Pravin Solanki'],
+      locationExcelIds: ['dolvan'],
+      status: 'active',
+      createdAt: now,
+      updatedAt: now
+    },
+    {
+      id: 'team-vyara-central',
+      name: 'Vyara Maintenance Team',
+      code: 'VYR-01',
+      division: 'VYARA',
+      subdivision: 'VYARA',
+      members: ['Suresh Gamit', 'Bharat Vasava'],
+      locationExcelIds: ['kandha_konchal'],
+      status: 'active',
+      createdAt: now,
+      updatedAt: now
+    }
+  ];
+
+  const defaultWorkbooks: LocationWorkbook[] = [
+    {
+      locationId: 'dolvan',
+      teamId: 'team-dolvan-maintenance',
+      locationName: 'Dolvan',
+      workbookName: 'Dolvan.xlsx',
+      activeSheetName: 'inventory',
+      sheets: {
+        inventory: {
+          name: 'inventory',
+          type: 'inventory',
+          performas: [createDolvanSamplePerforma('Dolvan')],
+          isCompatible: true,
+          rawRowsCount: 1
+        },
+        bill: {
+          name: 'bill',
+          type: 'bill',
+          performas: [],
+          isCompatible: true,
+          rawRowsCount: 11,
+          billData: createDefaultBillSheet('Dolvan')
+        }
+      },
+      lastModified: now
+    }
+  ];
+
   return {
     divisions: [division],
     subdivisions: [subdivision],
@@ -604,7 +670,9 @@ function createInitialSeedData(): DatabaseSchema {
     stockTransactions,
     fileRegistry,
     auditLogs,
-    bills
+    bills,
+    teams: defaultTeams,
+    workbooks: defaultWorkbooks
   };
 }
 
@@ -619,7 +687,24 @@ export class DatabaseStore {
       try {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         DatabaseStore.data = JSON.parse(raw);
+        let needsSave = false;
+
+        // Ensure teams & workbooks collections exist in existing DB
+        if (!Array.isArray(DatabaseStore.data.teams) || DatabaseStore.data.teams.length === 0) {
+          const seed = createInitialSeedData();
+          DatabaseStore.data.teams = seed.teams;
+          needsSave = true;
+        }
+        if (!Array.isArray(DatabaseStore.data.workbooks)) {
+          const seed = createInitialSeedData();
+          DatabaseStore.data.workbooks = seed.workbooks;
+          needsSave = true;
+        }
+
         DatabaseStore.isLoaded = true;
+        if (needsSave) {
+          DatabaseStore.saveToDisk();
+        }
         console.log(`[Database] Loaded persistent database from ${DB_FILE}`);
         return DatabaseStore.data;
       } catch (err) {
@@ -642,17 +727,107 @@ export class DatabaseStore {
     return DatabaseStore.data;
   }
 
+  public static getStorageStats(): { fileSizeBytes: number; teamsCount: number; workbooksCount: number; performasCount: number } {
+    const db = DatabaseStore.get();
+    let fileSizeBytes = 0;
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        fileSizeBytes = fs.statSync(DB_FILE).size;
+      }
+    } catch {
+      // ignore
+    }
+    const teamsCount = (db.teams || []).length;
+    const workbooksCount = (db.workbooks || []).length;
+    const performasCount = (db.workbooks || []).reduce((acc, wb) => {
+      const inv = wb.sheets?.['inventory'] || wb.sheets?.['Performas'];
+      return acc + (inv?.performas?.length || 0);
+    }, 0);
+
+    return { fileSizeBytes, teamsCount, workbooksCount, performasCount };
+  }
+
+  public static optimizeAndCompact(): { beforeBytes: number; afterBytes: number } {
+    const beforeBytes = DatabaseStore.getStorageStats().fileSizeBytes;
+    const db = DatabaseStore.get();
+
+    // 1. Prune audit logs to latest 100 entries to prevent storage bloat
+    if (Array.isArray(db.auditLogs) && db.auditLogs.length > 100) {
+      db.auditLogs = db.auditLogs.slice(0, 100);
+    }
+
+    // 2. Deduplicate teams by id
+    if (Array.isArray(db.teams)) {
+      const seenTeams = new Map<string, Team>();
+      for (const t of db.teams) {
+        if (t && t.id) seenTeams.set(t.id, t);
+      }
+      db.teams = Array.from(seenTeams.values());
+    }
+
+    // 3. Deduplicate workbooks & compact performas inside each workbook
+    if (Array.isArray(db.workbooks)) {
+      const seenWbs = new Map<string, LocationWorkbook>();
+      for (const wb of db.workbooks) {
+        if (!wb || !wb.locationId) continue;
+        const cleanSheets: Record<string, any> = {};
+        for (const [sName, sheet] of Object.entries(wb.sheets || {})) {
+          if (!sheet) continue;
+          const seenPerformaIds = new Set<string>();
+          const cleanPerformas = [];
+          for (const p of sheet.performas || []) {
+            if (!p || !p.id) continue;
+            const normId = p.id.trim().toLowerCase();
+            if (!normId || seenPerformaIds.has(normId)) continue;
+            seenPerformaIds.add(normId);
+            cleanPerformas.push({
+              ...p,
+              id: p.id.trim(),
+              status: 'saved',
+              items: (p.items || []).map(it => ({
+                id: it.id,
+                srNo: it.srNo,
+                ...(it.subIndex !== undefined ? { subIndex: it.subIndex } : {}),
+                description: it.description,
+                unit: it.unit,
+                materialYes: !!it.materialYes,
+                labourYes: !!it.labourYes,
+                qty: Number(it.qty) || 0,
+                remarks: (it.remarks || '').trim()
+              }))
+            });
+          }
+          cleanSheets[sName] = {
+            ...sheet,
+            performas: cleanPerformas,
+            rawRowsCount: sheet.type === 'bill' ? (sheet.billData?.items?.length || 0) : cleanPerformas.length
+          };
+        }
+        seenWbs.set(wb.locationId, {
+          ...wb,
+          sheets: cleanSheets
+        });
+      }
+      db.workbooks = Array.from(seenWbs.values());
+    }
+
+    DatabaseStore.saveToDisk();
+    const afterBytes = DatabaseStore.getStorageStats().fileSizeBytes;
+    return { beforeBytes, afterBytes };
+  }
+
   public static saveToDisk(): void {
     ensureDataDir();
     const tempFile = `${DB_FILE}.tmp.${Date.now()}`;
+    // Write compact JSON to minimize disk usage and speed up I/O
+    const serialized = JSON.stringify(DatabaseStore.data);
     try {
-      fs.writeFileSync(tempFile, JSON.stringify(DatabaseStore.data, null, 2), 'utf-8');
+      fs.writeFileSync(tempFile, serialized, 'utf-8');
       fs.renameSync(tempFile, DB_FILE);
     } catch (err) {
       console.error('[Database] Atomic write error:', err);
-      // Fallback direct write
       try {
-        fs.writeFileSync(DB_FILE, JSON.stringify(DatabaseStore.data, null, 2), 'utf-8');
+        fs.writeFileSync(DB_FILE, serialized, 'utf-8');
       } catch (e2) {
         console.error('[Database] Direct write error:', e2);
       }

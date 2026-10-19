@@ -1673,6 +1673,176 @@ app.get('/api/sync/events', (req: Request, res: Response) => {
   });
 });
 
+// -------------------------------------------------------------
+// Central Multi-User Shared Database API (Teams, Workbooks, Performas & Storage Optimization)
+// Ensures ALL users see the exact same data with Save, Edit, Delete, and View from Central DB
+// -------------------------------------------------------------
+
+// 1. Get all Teams from central database
+app.get('/api/db/teams', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, data: db.teams || [] });
+});
+
+// 2. Save / Edit Team in central database
+app.post('/api/db/teams', (req: Request, res: Response) => {
+  const team = req.body;
+  if (!team || !team.id || !team.name) {
+    return res.status(400).json({ success: false, error: 'Team id and name are required' });
+  }
+  const db = DatabaseStore.get();
+  if (!Array.isArray(db.teams)) db.teams = [];
+
+  const idx = db.teams.findIndex(t => t.id === team.id);
+  const now = new Date().toISOString();
+  const cleanTeam = {
+    id: String(team.id).trim(),
+    name: String(team.name).trim(),
+    code: String(team.code || '').trim(),
+    division: String(team.division || '').trim(),
+    subdivision: String(team.subdivision || '').trim(),
+    ...(team.inChargeEngineer ? { inChargeEngineer: team.inChargeEngineer } : {}),
+    members: Array.isArray(team.members) ? team.members : [],
+    locationExcelIds: Array.isArray(team.locationExcelIds) ? team.locationExcelIds : [],
+    status: team.status === 'inactive' ? 'inactive' as const : 'active' as const,
+    createdAt: team.createdAt || now,
+    updatedAt: now
+  };
+
+  if (idx >= 0) {
+    db.teams[idx] = cleanTeam;
+  } else {
+    db.teams.push(cleanTeam);
+  }
+
+  DatabaseStore.saveToDisk();
+  broadcastSync({ teamId: cleanTeam.id }, 'db_teams_updated');
+  res.json({ success: true, data: cleanTeam });
+});
+
+// 3. Delete Team from central database (with optional cascade or unassign)
+app.delete('/api/db/teams/:id', (req: Request, res: Response) => {
+  const teamId = String(req.params.id || '').trim();
+  const db = DatabaseStore.get();
+  if (!Array.isArray(db.teams)) db.teams = [];
+
+  const beforeLen = db.teams.length;
+  db.teams = db.teams.filter(t => t.id !== teamId);
+
+  // Reassign or clean up workbooks referencing deleted team
+  if (Array.isArray(db.workbooks)) {
+    const fallbackTeamId = db.teams[0]?.id || 'team-dolvan-maintenance';
+    db.workbooks = db.workbooks.map(wb => 
+      wb.teamId === teamId ? { ...wb, teamId: fallbackTeamId } : wb
+    );
+  }
+
+  DatabaseStore.optimizeAndCompact();
+  broadcastSync({ teamId }, 'db_teams_updated');
+  res.json({ success: true, deleted: beforeLen !== db.teams.length });
+});
+
+// 4. Get all Location Workbooks (and all Performas + Bill sheets) from central database
+app.get('/api/db/workbooks', (_req: Request, res: Response) => {
+  const db = DatabaseStore.get();
+  res.json({ success: true, data: db.workbooks || [] });
+});
+
+// 5. Save / Edit Location Workbook (and its Performas / Bill sheet) in central database
+app.post('/api/db/workbooks', (req: Request, res: Response) => {
+  const wb = req.body;
+  if (!wb || !wb.locationId || !wb.locationName) {
+    return res.status(400).json({ success: false, error: 'Workbook locationId and locationName are required' });
+  }
+  const db = DatabaseStore.get();
+  if (!Array.isArray(db.workbooks)) db.workbooks = [];
+
+  const idx = db.workbooks.findIndex(w => w.locationId === wb.locationId);
+  if (idx >= 0) {
+    db.workbooks[idx] = wb;
+  } else {
+    db.workbooks.push(wb);
+  }
+
+  // Also ensure team's locationExcelIds stays updated without duplicates
+  if (wb.teamId && Array.isArray(db.teams)) {
+    const tIdx = db.teams.findIndex(t => t.id === wb.teamId);
+    if (tIdx >= 0) {
+      const ids = new Set(db.teams[tIdx].locationExcelIds || []);
+      ids.add(wb.locationId);
+      db.teams[tIdx].locationExcelIds = Array.from(ids);
+    }
+  }
+
+  DatabaseStore.optimizeAndCompact();
+  broadcastSync({ locationId: wb.locationId }, 'db_workbooks_updated');
+  res.json({ success: true, data: wb });
+});
+
+// 6. Delete an entire Location Workbook from central database and reclaim storage
+app.delete('/api/db/workbooks/:locationId', (req: Request, res: Response) => {
+  const locationId = String(req.params.locationId || '').trim();
+  const db = DatabaseStore.get();
+  if (!Array.isArray(db.workbooks)) db.workbooks = [];
+
+  const beforeLen = db.workbooks.length;
+  db.workbooks = db.workbooks.filter(w => w.locationId !== locationId);
+
+  // Remove reference from teams
+  if (Array.isArray(db.teams)) {
+    db.teams = db.teams.map(t => ({
+      ...t,
+      locationExcelIds: (t.locationExcelIds || []).filter(id => id !== locationId)
+    }));
+  }
+
+  const stats = DatabaseStore.optimizeAndCompact();
+  broadcastSync({ locationId }, 'db_workbooks_updated');
+  res.json({ success: true, deleted: beforeLen !== db.workbooks.length, storage: stats });
+});
+
+// 7. Delete a single Performa record from a Location Workbook in central database and reclaim storage
+app.delete('/api/db/workbooks/:locationId/performas/:performaId', (req: Request, res: Response) => {
+  const locationId = String(req.params.locationId || '').trim();
+  const performaId = String(req.params.performaId || '').trim();
+  const db = DatabaseStore.get();
+  if (!Array.isArray(db.workbooks)) db.workbooks = [];
+
+  const wbIdx = db.workbooks.findIndex(w => w.locationId === locationId);
+  if (wbIdx === -1) {
+    return res.status(404).json({ success: false, error: 'Workbook not found' });
+  }
+
+  const wb = db.workbooks[wbIdx];
+  for (const sheetKey of Object.keys(wb.sheets || {})) {
+    const sheet = wb.sheets[sheetKey];
+    if (sheet && Array.isArray(sheet.performas)) {
+      sheet.performas = sheet.performas.filter(
+        p => p.id.trim().toLowerCase() !== performaId.toLowerCase()
+      );
+      sheet.rawRowsCount = sheet.performas.length;
+    }
+  }
+  wb.lastModified = new Date().toISOString();
+  db.workbooks[wbIdx] = wb;
+
+  const stats = DatabaseStore.optimizeAndCompact();
+  broadcastSync({ locationId, performaId }, 'db_performa_deleted');
+  res.json({ success: true, workbook: wb, storage: stats });
+});
+
+// 8. Database Storage Stats & Manual Compaction Endpoint
+app.get('/api/db/stats', (_req: Request, res: Response) => {
+  res.json({ success: true, stats: DatabaseStore.getStorageStats() });
+});
+
+app.post('/api/db/optimize', (_req: Request, res: Response) => {
+  const result = DatabaseStore.optimizeAndCompact();
+  const stats = DatabaseStore.getStorageStats();
+  broadcastSync({ stats }, 'db_storage_optimized');
+  res.json({ success: true, ...result, stats });
+});
+
 // Setup Vite or static serving
 async function startServer() {
   if (process.env.NODE_ENV === 'production') {

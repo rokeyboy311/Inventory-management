@@ -16,7 +16,7 @@ export const DraftRecoveryBanner: React.FC<DraftRecoveryBannerProps> = ({
   if (!draft) return null;
 
   return (
-    <div className="w-full bg-blue-900 text-white px-4 py-2.5 shadow-md border-b border-blue-700 animate-fadeIn">
+    <div className="w-full max-w-full overflow-hidden bg-blue-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 shadow-md border-b border-blue-700 animate-fadeIn">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
         <div className="flex items-center space-x-2.5">
           <AlertCircle className="w-4 h-4 text-blue-300 flex-shrink-0" />

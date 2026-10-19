@@ -99,7 +99,7 @@ export const ExcelImportSidebar: React.FC<ExcelImportSidebarProps> = ({
   };
 
   return (
-    <div className="w-full space-y-4 text-slate-800">
+    <div className="w-full max-w-full min-w-0 space-y-4 text-slate-800 overflow-hidden">
       {/* 1. Excel Import Card */}
       <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-4">
         <div className="flex items-center space-x-2.5 mb-2">

@@ -1,4 +1,4 @@
-import { LocationWorkbook, PerformaRecord, createBlankPerforma } from '../types/performa';
+import { LocationWorkbook, PerformaRecord } from '../types/performa';
 import { Team } from '../types/team';
 import { createDolvanSamplePerforma, createDefaultBillSheet } from './dolvanTemplate';
 import { 
@@ -7,7 +7,9 @@ import {
   deleteTeamSupabase, 
   fetchWorkbooksFromSupabase, 
   upsertWorkbookSupabase, 
-  deleteWorkbookSupabase 
+  deleteWorkbookSupabase,
+  deletePerformaSupabase,
+  optimizeWorkbookForStorage
 } from './supabaseClient';
 
 const DB_NAME = 'PerformaDataEngineDB';
@@ -21,7 +23,7 @@ export const syncBroadcastChannel = typeof window !== 'undefined' && 'BroadcastC
   ? new BroadcastChannel('dgvcl_inventory_sync_channel')
   : null;
 
-// IndexedDB Helper
+// IndexedDB Helper (Lightweight local mirror only, kept strictly pruned to match Central DB)
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !window.indexedDB) {
@@ -46,8 +48,156 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * Replaces the entire IndexedDB store with the exact authoritative list from the Central Database,
+ * guaranteeing that any deleted records are physically wiped from local browser storage as well.
+ */
+async function syncLocalStoreAuthoritatively<T>(storeName: string, items: T[], localStorageKey: string): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(localStorageKey, JSON.stringify(items));
+  } catch {
+    // If localStorage is near quota, remove old bloated keys first
+    try {
+      localStorage.removeItem('performa_workbooks_v1');
+      localStorage.setItem(localStorageKey, JSON.stringify(items));
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const db = await openDatabase();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      store.clear();
+      for (const item of items) {
+        store.put(item);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {
+    // ignore
+  }
+}
+
 // -------------------------------------------------------------
-// Team Storage Management
+// Central Server API Helpers (Shared across all users)
+// -------------------------------------------------------------
+async function fetchTeamsFromServer(): Promise<Team[] | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch('/api/db/teams', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json && json.success && Array.isArray(json.data)) {
+      return json.data as Team[];
+    }
+  } catch {
+    // fallback if offline
+  }
+  return null;
+}
+
+async function saveTeamToServer(team: Team): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch('/api/db/teams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(team)
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function deleteTeamFromServer(teamId: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch(`/api/db/teams/${encodeURIComponent(teamId)}`, {
+      method: 'DELETE'
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchWorkbooksFromServer(): Promise<LocationWorkbook[] | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch('/api/db/workbooks', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json && json.success && Array.isArray(json.data)) {
+      return json.data as LocationWorkbook[];
+    }
+  } catch {
+    // fallback if offline
+  }
+  return null;
+}
+
+async function saveWorkbookToServer(wb: LocationWorkbook): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch('/api/db/workbooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(wb)
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function deleteWorkbookFromServer(locationId: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch(`/api/db/workbooks/${encodeURIComponent(locationId)}`, {
+      method: 'DELETE'
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function deletePerformaFromServer(locationId: string, performaId: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch(
+      `/api/db/workbooks/${encodeURIComponent(locationId)}/performas/${encodeURIComponent(performaId)}`,
+      { method: 'DELETE' }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function triggerDatabaseOptimization(): Promise<{ beforeBytes: number; afterBytes: number } | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const res = await fetch('/api/db/optimize', { method: 'POST' });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json && json.success) {
+      return { beforeBytes: json.beforeBytes, afterBytes: json.afterBytes };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+// -------------------------------------------------------------
+// Team Storage Management (Save, Edit, Delete, View from Database)
 // -------------------------------------------------------------
 export function createDefaultTeams(): Team[] {
   return [
@@ -73,25 +223,29 @@ export function createDefaultTeams(): Team[] {
 }
 
 export async function loadTeamsFromStorage(): Promise<Team[]> {
-  // First attempt to load from Supabase if connected
+  // 1. Try Supabase Cloud if tables are ready
   try {
     const remoteTeams = await fetchTeamsFromSupabase();
     if (remoteTeams && remoteTeams.length > 0) {
-      localStorage.setItem('dgvcl_teams_v1', JSON.stringify(remoteTeams));
-      return remoteTeams;
-    } else if (remoteTeams && remoteTeams.length === 0) {
-      // Remote connected but table is empty. Seed remote teams into Supabase!
-      const defaults = createDefaultTeams();
-      for (const t of defaults) {
-        await upsertTeamSupabase(t);
+      // Keep Central Server DB in sync with Supabase
+      for (const t of remoteTeams) {
+        saveTeamToServer(t).catch(() => {});
       }
-      localStorage.setItem('dgvcl_teams_v1', JSON.stringify(defaults));
-      return defaults;
+      await syncLocalStoreAuthoritatively(STORE_TEAMS, remoteTeams, 'dgvcl_teams_v1');
+      return remoteTeams;
     }
   } catch {
-    // fallback to local
+    // continue to Central Server DB
   }
 
+  // 2. Load from Central Server DB (/api/db/teams) so ALL users see the exact same teams
+  const serverTeams = await fetchTeamsFromServer();
+  if (serverTeams && serverTeams.length > 0) {
+    await syncLocalStoreAuthoritatively(STORE_TEAMS, serverTeams, 'dgvcl_teams_v1');
+    return serverTeams;
+  }
+
+  // 3. Offline fallback: IndexedDB / localStorage
   try {
     const db = await openDatabase();
     return new Promise((resolve) => {
@@ -111,7 +265,7 @@ export async function loadTeamsFromStorage(): Promise<Team[]> {
                 resolve(parsed);
                 return;
               }
-            } catch (e) {
+            } catch {
               // ignore
             }
           }
@@ -122,82 +276,67 @@ export async function loadTeamsFromStorage(): Promise<Team[]> {
       };
       req.onerror = () => resolve(createDefaultTeams());
     });
-  } catch (err) {
-    const local = localStorage.getItem('dgvcl_teams_v1');
-    if (local) {
-      try {
-        const parsed = JSON.parse(local);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        // ignore
-      }
-    }
+  } catch {
     return createDefaultTeams();
   }
 }
 
 export async function saveTeamToStorage(team: Team): Promise<void> {
-  // Save locally
+  const updatedTeam: Team = {
+    ...team,
+    id: team.id.trim(),
+    name: team.name.trim(),
+    updatedAt: new Date().toISOString()
+  };
+
+  // 1. Save to Central Server Database immediately so all users view it
+  await saveTeamToServer(updatedTeam);
+
+  // 2. Save to Supabase Cloud if active
   try {
-    const all = await loadTeamsFromStorage();
-    const idx = all.findIndex(t => t.id === team.id);
-    if (idx >= 0) {
-      all[idx] = team;
-    } else {
-      all.push(team);
-    }
-    localStorage.setItem('dgvcl_teams_v1', JSON.stringify(all));
-  } catch (e) {
+    await upsertTeamSupabase(updatedTeam);
+  } catch {
     // ignore
   }
 
+  // 3. Update local mirror cleanly without duplicating
   try {
-    const db = await openDatabase();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_TEAMS, 'readwrite');
-      const store = tx.objectStore(STORE_TEAMS);
-      const req = store.put(team);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch (err) {
-    // handled in localStorage fallback
+    const localRaw = localStorage.getItem('dgvcl_teams_v1');
+    const currentList: Team[] = localRaw ? JSON.parse(localRaw) : [];
+    const idx = currentList.findIndex(t => t.id === updatedTeam.id);
+    if (idx >= 0) {
+      currentList[idx] = updatedTeam;
+    } else {
+      currentList.push(updatedTeam);
+    }
+    await syncLocalStoreAuthoritatively(STORE_TEAMS, currentList, 'dgvcl_teams_v1');
+  } catch {
+    // ignore
   }
 
-  // Guaranteed sync to Supabase Cloud
-  try {
-    await upsertTeamSupabase(team);
-  } catch (err) {
-    console.warn('Supabase team sync error:', err);
-  }
-
-  syncBroadcastChannel?.postMessage({ type: 'TEAM_UPDATED', teamId: team.id });
+  syncBroadcastChannel?.postMessage({ type: 'TEAM_UPDATED', teamId: updatedTeam.id });
 }
 
 export async function deleteTeamFromStorage(teamId: string): Promise<void> {
+  // 1. Delete from Central Server Database (and optimize storage)
+  await deleteTeamFromServer(teamId);
+
+  // 2. Delete from Supabase Cloud
   try {
-    const all = await loadTeamsFromStorage();
-    const filtered = all.filter(t => t.id !== teamId);
-    localStorage.setItem('dgvcl_teams_v1', JSON.stringify(filtered));
-  } catch (e) {
+    await deleteTeamSupabase(teamId);
+  } catch {
     // ignore
   }
 
+  // 3. Physically delete from local mirror
   try {
-    const db = await openDatabase();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_TEAMS, 'readwrite');
-      const store = tx.objectStore(STORE_TEAMS);
-      const req = store.delete(teamId);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch (err) {
-    // fallback
+    const localRaw = localStorage.getItem('dgvcl_teams_v1');
+    const currentList: Team[] = localRaw ? JSON.parse(localRaw) : [];
+    const filtered = currentList.filter(t => t.id !== teamId);
+    await syncLocalStoreAuthoritatively(STORE_TEAMS, filtered, 'dgvcl_teams_v1');
+  } catch {
+    // ignore
   }
-
-  // Delete from Supabase in background
-  deleteTeamSupabase(teamId).catch(() => {});
 
   syncBroadcastChannel?.postMessage({ type: 'TEAM_DELETED', teamId });
 }
@@ -206,18 +345,13 @@ export async function deleteTeamFromStorage(teamId: string): Promise<void> {
 // Location Workbook Storage (Automatic 2 Sheets: inventory + bill)
 // -------------------------------------------------------------
 
-/**
- * Creates brand new Location Workbook with 2 sheets:
- * 1. 'inventory': exact DOLVAN INVENTERY layout with pre-populated sample row!
- * 2. 'bill': billing calculation sheet
- */
 export function createNewLocationWorkbookWithDualSheets(locationName: string, teamId: string = 'team-dolvan-maintenance'): LocationWorkbook {
   const cleanLoc = locationName.trim();
   const id = cleanLoc.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'loc';
   const samplePerforma = createDolvanSamplePerforma(cleanLoc);
   const defaultBill = createDefaultBillSheet(cleanLoc);
 
-  return {
+  return optimizeWorkbookForStorage({
     locationId: id,
     teamId,
     locationName: cleanLoc,
@@ -241,40 +375,54 @@ export function createNewLocationWorkbookWithDualSheets(locationName: string, te
       }
     },
     lastModified: new Date().toISOString()
-  };
+  });
 }
 
-// Initial seed workbook for initial launch
 export function createInitialWorkbook(locationName: string = 'Dolvan', teamId: string = 'team-dolvan-maintenance'): LocationWorkbook {
   return createNewLocationWorkbookWithDualSheets(locationName, teamId);
 }
 
-// Legacy alias for compatibility
 export function createNewLocationWorkbook(locationName: string): LocationWorkbook {
   return createNewLocationWorkbookWithDualSheets(locationName, 'team-dolvan-maintenance');
 }
 
 /**
- * Loads all workbooks from IndexedDB (with localStorage fallback).
+ * Loads all workbooks from the shared database (Supabase + Central Server DB) so ALL users see the exact same data.
  */
 export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
-  // First attempt to load from Supabase if connected
+  // 1. First attempt to load from Supabase if tables are ready
   try {
     const remoteWorkbooks = await fetchWorkbooksFromSupabase();
     if (remoteWorkbooks && remoteWorkbooks.length > 0) {
-      localStorage.setItem('performa_workbooks_v2', JSON.stringify(remoteWorkbooks));
-      return remoteWorkbooks;
-    } else if (remoteWorkbooks && remoteWorkbooks.length === 0) {
-      // Remote connected but table is empty. Seed initial Dolvan workbook into Supabase!
-      const initial = [createInitialWorkbook('Dolvan')];
-      await upsertWorkbookSupabase(initial[0]);
-      localStorage.setItem('performa_workbooks_v2', JSON.stringify(initial));
-      return initial;
+      const optimizedList = remoteWorkbooks.map(w => optimizeWorkbookForStorage(w));
+      // Sync to Central Server DB as well
+      for (const wb of optimizedList) {
+        saveWorkbookToServer(wb).catch(() => {});
+      }
+      await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, optimizedList, 'performa_workbooks_v2');
+      return optimizedList;
     }
   } catch {
-    // fallback
+    // continue to Central Server DB
   }
 
+  // 2. Load from Central Server DB (/api/db/workbooks) - shared across all users!
+  const serverWorkbooks = await fetchWorkbooksFromServer();
+  if (serverWorkbooks) {
+    if (serverWorkbooks.length > 0) {
+      const optimizedList = serverWorkbooks.map(w => optimizeWorkbookForStorage(w));
+      await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, optimizedList, 'performa_workbooks_v2');
+      return optimizedList;
+    } else {
+      // Seed initial Dolvan workbook into Central Server DB if empty
+      const initial = [createInitialWorkbook('Dolvan')];
+      await saveWorkbookToServer(initial[0]);
+      await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, initial, 'performa_workbooks_v2');
+      return initial;
+    }
+  }
+
+  // 3. Offline fallback: IndexedDB / localStorage
   try {
     const db = await openDatabase();
     return new Promise((resolve) => {
@@ -286,7 +434,6 @@ export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
         if (results && results.length > 0) {
           resolve(results);
         } else {
-          // Check localStorage fallback
           const local = localStorage.getItem('performa_workbooks_v2');
           if (local) {
             try {
@@ -295,11 +442,10 @@ export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
                 resolve(parsed);
                 return;
               }
-            } catch (e) {
+            } catch {
               // ignore
             }
           }
-          // Seed with initial Dolvan workbook
           const initial = [createInitialWorkbook('Dolvan')];
           saveWorkbookToStorage(initial[0]);
           resolve(initial);
@@ -309,90 +455,115 @@ export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
         resolve([createInitialWorkbook('Dolvan')]);
       };
     });
-  } catch (err) {
-    const local = localStorage.getItem('performa_workbooks_v2');
-    if (local) {
-      try {
-        const parsed = JSON.parse(local);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        // ignore
-      }
-    }
+  } catch {
     return [createInitialWorkbook('Dolvan')];
   }
 }
 
 /**
- * Saves a single workbook into IndexedDB and keeps localStorage in sync.
+ * Compacts and saves a single workbook to Central Server DB, Supabase Cloud, and local mirror.
  */
 export async function saveWorkbookToStorage(workbook: LocationWorkbook): Promise<void> {
+  const optimized = optimizeWorkbookForStorage(workbook);
+
+  // 1. Save to Central Server Database (shared across all users & devices)
+  await saveWorkbookToServer(optimized);
+
+  // 2. Save to Supabase Cloud (if tables are provisioned)
   try {
-    const allWorkbooks = await loadWorkbooksFromStorage();
-    const idx = allWorkbooks.findIndex(w => w.locationId === workbook.locationId);
-    if (idx >= 0) {
-      allWorkbooks[idx] = workbook;
-    } else {
-      allWorkbooks.push(workbook);
-    }
-    localStorage.setItem('performa_workbooks_v2', JSON.stringify(allWorkbooks));
-  } catch (e) {
+    await upsertWorkbookSupabase(optimized);
+  } catch {
     // ignore
   }
 
+  // 3. Update local mirror cleanly without duplicating
   try {
-    const db = await openDatabase();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_WORKBOOKS, 'readwrite');
-      const store = tx.objectStore(STORE_WORKBOOKS);
-      const req = store.put(workbook);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch (err) {
-    // fallback
+    const localRaw = localStorage.getItem('performa_workbooks_v2');
+    const currentList: LocationWorkbook[] = localRaw ? JSON.parse(localRaw) : [];
+    const idx = currentList.findIndex(w => w.locationId === optimized.locationId);
+    if (idx >= 0) {
+      currentList[idx] = optimized;
+    } else {
+      currentList.push(optimized);
+    }
+    await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, currentList, 'performa_workbooks_v2');
+  } catch {
+    // ignore
   }
 
-  // Guaranteed sync to Supabase Cloud
-  try {
-    await upsertWorkbookSupabase(workbook);
-  } catch (err) {
-    console.warn('Supabase workbook sync error:', err);
-  }
-
-  syncBroadcastChannel?.postMessage({ type: 'WORKBOOK_UPDATED', locationId: workbook.locationId });
+  syncBroadcastChannel?.postMessage({ type: 'WORKBOOK_UPDATED', locationId: optimized.locationId });
 }
 
+/**
+ * Physically deletes a Location Workbook from Central Server DB, Supabase Cloud, and local storage,
+ * reclaiming storage space immediately.
+ */
 export async function deleteWorkbookFromStorage(locationId: string): Promise<void> {
+  // 1. Delete from Central Server Database (compacts DB on disk)
+  await deleteWorkbookFromServer(locationId);
+
+  // 2. Delete from Supabase Cloud (cascades child performas)
   try {
-    const allWorkbooks = await loadWorkbooksFromStorage();
-    const filtered = allWorkbooks.filter(w => w.locationId !== locationId);
-    localStorage.setItem('performa_workbooks_v2', JSON.stringify(filtered));
-  } catch (e) {
+    await deleteWorkbookSupabase(locationId);
+  } catch {
     // ignore
   }
 
+  // 3. Physically delete from local mirror and clear any lingering drafts for this location
   try {
-    const db = await openDatabase();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_WORKBOOKS, 'readwrite');
-      const store = tx.objectStore(STORE_WORKBOOKS);
-      const req = store.delete(locationId);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch (err) {
-    // fallback
-  }
+    const localRaw = localStorage.getItem('performa_workbooks_v2');
+    const currentList: LocationWorkbook[] = localRaw ? JSON.parse(localRaw) : [];
+    const filtered = currentList.filter(w => w.locationId !== locationId);
+    await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, filtered, 'performa_workbooks_v2');
 
-  // Delete from Supabase in background
-  deleteWorkbookSupabase(locationId).catch(() => {});
+    const draft = getUnsavedDraft();
+    if (draft && draft.locationId === locationId) {
+      clearUnsavedDraft();
+    }
+  } catch {
+    // ignore
+  }
 
   syncBroadcastChannel?.postMessage({ type: 'WORKBOOK_DELETED', locationId });
 }
 
+/**
+ * Physically deletes a single Performa record from a Location Workbook across Central Server DB,
+ * Supabase (`workbooks` + `performas` table), and local storage to free up space.
+ */
+export async function deletePerformaFromStorage(locationId: string, performaId: string, updatedWorkbook: LocationWorkbook): Promise<void> {
+  const optimized = optimizeWorkbookForStorage(updatedWorkbook);
+
+  // 1. Delete from Central Server DB & save compacted workbook
+  await deletePerformaFromServer(locationId, performaId);
+  await saveWorkbookToServer(optimized);
+
+  // 2. Delete from Supabase `performas` table & update `workbooks` row
+  try {
+    await deletePerformaSupabase(locationId, performaId);
+    await upsertWorkbookSupabase(optimized);
+  } catch {
+    // ignore
+  }
+
+  // 3. Update local mirror cleanly
+  try {
+    const localRaw = localStorage.getItem('performa_workbooks_v2');
+    const currentList: LocationWorkbook[] = localRaw ? JSON.parse(localRaw) : [];
+    const idx = currentList.findIndex(w => w.locationId === optimized.locationId);
+    if (idx >= 0) {
+      currentList[idx] = optimized;
+    }
+    await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, currentList, 'performa_workbooks_v2');
+  } catch {
+    // ignore
+  }
+
+  syncBroadcastChannel?.postMessage({ type: 'WORKBOOK_UPDATED', locationId: optimized.locationId });
+}
+
 // -------------------------------------------------------------
-// Draft protection helpers
+// Draft protection helpers (Single lightweight slot, auto-cleared on save/delete)
 // -------------------------------------------------------------
 export interface UnsavedDraftState {
   key: string;
@@ -412,7 +583,7 @@ export function saveUnsavedDraft(locationId: string, sheetName: string, performa
       savedAt: new Date().toISOString()
     };
     localStorage.setItem('performa_active_draft', JSON.stringify(draft));
-  } catch (e) {
+  } catch {
     // ignore
   }
 }
@@ -422,7 +593,7 @@ export function getUnsavedDraft(): UnsavedDraftState | null {
     const str = localStorage.getItem('performa_active_draft');
     if (!str) return null;
     return JSON.parse(str) as UnsavedDraftState;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -430,7 +601,7 @@ export function getUnsavedDraft(): UnsavedDraftState | null {
 export function clearUnsavedDraft(): void {
   try {
     localStorage.removeItem('performa_active_draft');
-  } catch (e) {
+  } catch {
     // ignore
   }
 }

@@ -39,12 +39,6 @@ export function getDefaultPrefixForLocation(location: string): string {
 /**
  * Automatically inspects ALL existing records in the dataset to determine
  * the NEXT consecutive Performa ID.
- * 
- * Rules:
- * 1. Must inspect ALL existing records (not simply row count, since deleted records or imports create gaps).
- * 2. E.g. AHM-001, AHM-002, AHM-004 -> Max number is 4 -> Next MUST be AHM-005.
- * 3. E.g. AHM-099 -> Next is AHM-100.
- * 4. Maintains same prefix and digit padding (minimum 3 digits).
  */
 export function getNextPerformaId(
   existingPerformas: PerformaRecord[],
@@ -72,22 +66,106 @@ export function getNextPerformaId(
     }
   }
 
-  // If no numeric IDs found, start with default prefix
   if (maxNum === 0) {
     const defaultPrefix = detectedPrefix || getDefaultPrefixForLocation(locationName);
     return `${defaultPrefix}001`;
   }
 
   const nextNum = maxNum + 1;
-  // Pad with leading zeros (e.g. 005, 099 -> 100)
   const padded = String(nextNum).padStart(detectedDigits, '0');
   return `${detectedPrefix}${padded}`;
 }
 
 /**
  * Checks if a given Performa ID already exists in the records list.
- * If editing an existing record, pass currentRecordOriginalId to ignore self.
+ * Supports both exact match (e.g., "DOL-002") and numeric match (e.g., typing "2" or "002" matches "DOL-002").
  */
+export function findMatchingPerforma(
+  inputId: string,
+  existingPerformas: PerformaRecord[]
+): PerformaRecord | null {
+  const trimmed = (inputId || '').trim();
+  if (!trimmed || !existingPerformas || existingPerformas.length === 0) return null;
+
+  const lower = trimmed.toLowerCase();
+
+  // 1. Exact ID match (case-insensitive)
+  const exact = existingPerformas.find(p => p.id.trim().toLowerCase() === lower);
+  if (exact) return exact;
+
+  // 2. Numeric suffix match if user types just a number like "1" or "002" or "DOL-2"
+  const parsedInput = parsePerformaId(trimmed);
+  if (parsedInput) {
+    const numericMatch = existingPerformas.find(p => {
+      const parsedRecord = parsePerformaId(p.id);
+      if (!parsedRecord) return false;
+      // If user typed only digits (no prefix), match by number
+      if (!parsedInput.prefix) {
+        return parsedRecord.num === parsedInput.num;
+      }
+      // If user typed prefix + number (e.g. DOL-2 vs DOL-002), match prefix & number
+      return (
+        parsedRecord.prefix.toLowerCase() === parsedInput.prefix.toLowerCase() &&
+        parsedRecord.num === parsedInput.num
+      );
+    });
+    if (numericMatch) return numericMatch;
+  }
+
+  return null;
+}
+
+/**
+ * Formats a shorthand numeric input (like "5") into the canonical prefixed ID (like "DOL-005").
+ */
+export function normalizePerformaIdInput(
+  rawId: string,
+  existingPerformas: PerformaRecord[],
+  locationName: string = 'Dolvan'
+): string {
+  const trimmed = (rawId || '').trim();
+  if (!trimmed) return '';
+
+  // If user typed only digits (e.g., "5" or "12"), auto-prefix with workbook prefix
+  if (/^\d+$/.test(trimmed)) {
+    const num = parseInt(trimmed, 10);
+    let prefix = getDefaultPrefixForLocation(locationName);
+    let digits = 3;
+    for (const r of existingPerformas) {
+      const p = parsePerformaId(r.id);
+      if (p && p.prefix) {
+        prefix = p.prefix;
+        digits = Math.max(p.digits, 3);
+        break;
+      }
+    }
+    return `${prefix}${String(num).padStart(digits, '0')}`;
+  }
+
+  return trimmed.toUpperCase();
+}
+
+/**
+ * Sorts performas in ascending numerical order of their Performa ID so that
+ * when a new Performa ID (e.g., DOL-002) is added, it automatically goes to its
+ * exact row position in the Excel sheet (between DOL-001 and DOL-003).
+ */
+export function sortPerformasBySequence(performas: PerformaRecord[]): PerformaRecord[] {
+  return [...performas].sort((a, b) => {
+    const pa = parsePerformaId(a.id);
+    const pb = parsePerformaId(b.id);
+    if (pa && pb) {
+      if (pa.prefix.toLowerCase() === pb.prefix.toLowerCase()) {
+        return pa.num - pb.num;
+      }
+      if (pa.num !== pb.num) {
+        return pa.num - pb.num;
+      }
+    }
+    return a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
 export function checkDuplicatePerformaId(
   id: string,
   existingPerformas: PerformaRecord[],

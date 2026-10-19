@@ -24,11 +24,12 @@ import {
   saveTeamToStorage, 
   deleteTeamFromStorage, 
   loadWorkbooksFromStorage,
+  triggerDatabaseOptimization,
   syncBroadcastChannel 
 } from '../../utils/storage';
 import { CreateTeamModal } from './CreateTeamModal';
 import { SupabaseSettingsModal } from './SupabaseSettingsModal';
-import { isSupabaseConnected } from '../../utils/supabaseClient';
+import { isSupabaseConnected, subscribeToDatabaseChanges } from '../../utils/supabaseClient';
 
 interface AdminPanelProps {
   onNavigateToUser: (teamId?: string) => void;
@@ -58,13 +59,19 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
   useEffect(() => {
     refreshData();
 
-    // Listen to real-time broadcast channel from other tabs
+    // 1. Live cross-user database changes (SSE + Supabase Realtime)
+    const unsubscribeDb = subscribeToDatabaseChanges(() => {
+      refreshData();
+    });
+
+    // 2. Listen to real-time broadcast channel from other tabs
     const handleBroadcast = () => {
       refreshData();
     };
 
     syncBroadcastChannel?.addEventListener('message', handleBroadcast);
     return () => {
+      if (unsubscribeDb) unsubscribeDb();
       syncBroadcastChannel?.removeEventListener('message', handleBroadcast);
     };
   }, []);
@@ -226,12 +233,27 @@ export function AdminPanel({ onNavigateToUser }: AdminPanelProps) {
 
           <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">System Sync Status</p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Database & Storage</p>
               <h3 className="text-sm font-bold text-emerald-300 mt-1 flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                Real-Time Synchronized
+                Shared Central DB Active
               </h3>
-              <p className="text-[11px] text-slate-400 mt-1">IndexedDB + BroadcastChannel</p>
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await triggerDatabaseOptimization();
+                  if (res) {
+                    const kb = (res.afterBytes / 1024).toFixed(1);
+                    showNotify(`Database storage optimized & compacted (${kb} KB)`);
+                  } else {
+                    showNotify('Database storage is already compact & optimized!');
+                  }
+                }}
+                className="text-[11px] text-emerald-400 hover:text-emerald-300 underline mt-1 inline-flex items-center gap-1 cursor-pointer"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Optimize & Compact Storage</span>
+              </button>
             </div>
             <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-xl border border-indigo-500/20">
               <Layers className="w-6 h-6" />

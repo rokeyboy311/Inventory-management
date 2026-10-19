@@ -53,7 +53,7 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
   const nextSrNo = performas.length + 1;
 
   return (
-    <div className="w-full bg-white rounded-xl border border-slate-200 shadow-sm p-3.5 sm:p-6 space-y-4">
+    <div className="w-full max-w-full min-w-0 bg-white rounded-xl border border-slate-200 shadow-sm p-3.5 sm:p-6 space-y-4 overflow-hidden">
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <div className="flex items-center space-x-3">
@@ -242,7 +242,7 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
         </div>
       ) : (
         /* Full Data Table View */
-        <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <div className="w-full max-w-full min-w-0 border border-slate-200 rounded-lg overflow-hidden">
           {/* Mobile swipe helper */}
           <div className="flex items-center justify-between text-[11px] text-blue-700 bg-blue-50 px-2.5 py-1.5 border-b border-blue-200 md:hidden">
             <span className="flex items-center gap-1 font-medium">
@@ -252,7 +252,7 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
             <span className="font-bold text-slate-600">{filtered.length} rows</span>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="w-full max-w-full min-w-0 overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs min-w-[780px]">
               <thead>
                 <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]">

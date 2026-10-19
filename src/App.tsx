@@ -41,13 +41,16 @@ import { Team } from './types/team';
 
 import { 
   getNextPerformaId, 
-  checkDuplicatePerformaId 
+  checkDuplicatePerformaId,
+  sortPerformasBySequence,
+  normalizePerformaIdInput
 } from './utils/idGenerator';
 
 import { 
   loadWorkbooksFromStorage, 
   saveWorkbookToStorage, 
   deleteWorkbookFromStorage,
+  deletePerformaFromStorage,
   saveUnsavedDraft, 
   getUnsavedDraft, 
   clearUnsavedDraft,
@@ -221,6 +224,10 @@ export function App() {
     const loadedWorkbooks = await loadWorkbooksFromStorage();
     setTeams(loadedTeams);
     setWorkbooks(loadedWorkbooks);
+    setSelectedTeam(prev => {
+      if (!prev) return null;
+      return loadedTeams.find(t => t.id === prev.id) || null;
+    });
   };
 
   useEffect(() => {
@@ -318,32 +325,28 @@ export function App() {
   // Performa CRUD Operations
   // -------------------------------------------------------------
 
-  // Save current Performa record into dataset
+  // Save current Performa record into dataset (auto-places new Performa ID at its exact Excel sequence row)
   const saveCurrentPerformaInternal = (performaToSave: PerformaRecord): boolean => {
     if (!activeWorkbook || !activeSheet) return false;
 
-    const trimmedId = performaToSave.id.trim();
-    if (!trimmedId) {
+    const rawTrimmed = performaToSave.id.trim();
+    if (!rawTrimmed) {
       setDuplicateError('Performa ID cannot be empty');
       return false;
     }
 
-    // Check duplicate
-    const isDuplicate = checkDuplicatePerformaId(
-      trimmedId,
-      activePerformas,
-      originalEditingId || undefined
-    );
-
-    if (isDuplicate) {
-      setDuplicateError(`Performa ID "${trimmedId}" already exists.`);
-      return false;
-    }
+    const trimmedId = normalizePerformaIdInput(rawTrimmed, activePerformas, activeWorkbook.locationName);
 
     const nextPerformas = [...activePerformas];
-    const existingIndex = originalEditingId 
+    // Find if this ID already exists in the sheet (either by originalEditingId or matching trimmedId)
+    const directMatchIndex = nextPerformas.findIndex(
+      p => p.id.trim().toLowerCase() === trimmedId.toLowerCase()
+    );
+    const originalIndex = originalEditingId
       ? nextPerformas.findIndex(p => p.id.trim().toLowerCase() === originalEditingId.trim().toLowerCase())
       : -1;
+
+    const targetIndex = directMatchIndex >= 0 ? directMatchIndex : originalIndex;
 
     const recordToPersist: PerformaRecord = {
       ...performaToSave,
@@ -352,21 +355,36 @@ export function App() {
       updatedAt: new Date().toISOString()
     };
 
-    if (existingIndex >= 0) {
-      // Retain original row position for edited records
-      nextPerformas[existingIndex] = recordToPersist;
+    if (targetIndex >= 0) {
+      // Update existing record in place
+      nextPerformas[targetIndex] = recordToPersist;
+      if (originalEditingId && originalEditingId.trim().toLowerCase() !== trimmedId.toLowerCase()) {
+        deletePerformaFromStorage(activeWorkbook.locationId, originalEditingId, {
+          ...activeWorkbook,
+          sheets: {
+            ...activeWorkbook.sheets,
+            [effectiveSheetName]: {
+              ...activeSheet,
+              performas: nextPerformas,
+              rawRowsCount: nextPerformas.length
+            }
+          }
+        }).catch(() => {});
+      }
     } else {
-      // Append new records to the end
+      // Insert new Performa ID and sort by sequence so it goes to its exact Excel row place!
       nextPerformas.push(recordToPersist);
     }
+
+    const sortedPerformas = sortPerformasBySequence(nextPerformas);
 
     // Update workbook
     const updatedSheets = {
       ...activeWorkbook.sheets,
       [effectiveSheetName]: {
         ...activeSheet,
-        performas: nextPerformas,
-        rawRowsCount: nextPerformas.length
+        performas: sortedPerformas,
+        rawRowsCount: sortedPerformas.length
       }
     };
 
@@ -391,39 +409,51 @@ export function App() {
 
   // Action: Save & Close / Save Draft
   const handleSaveAndClose = () => {
-    const success = saveCurrentPerformaInternal(currentPerforma);
+    const normalizedId = normalizePerformaIdInput(
+      currentPerforma.id,
+      activePerformas,
+      activeWorkbook?.locationName || 'Dolvan'
+    );
+    const updatedRec = { ...currentPerforma, id: normalizedId };
+    setCurrentPerforma(updatedRec);
+    const success = saveCurrentPerformaInternal(updatedRec);
     if (success) {
-      setOriginalEditingId(currentPerforma.id);
-      showNotification(`Saved Performa ${currentPerforma.id} successfully!`);
+      setOriginalEditingId(normalizedId);
+      const sorted = sortPerformasBySequence([
+        ...activePerformas.filter(p => p.id.trim().toLowerCase() !== normalizedId.toLowerCase()),
+        updatedRec
+      ]);
+      const rowPos = sorted.findIndex(p => p.id.trim().toLowerCase() === normalizedId.toLowerCase()) + 1;
+      showNotification(`Saved Performa ${normalizedId} at Excel Row #${rowPos}!`);
     }
   };
 
   // Action: Save & Add Another (Continuous Entry)
   const handleSaveAndAddAnother = () => {
-    const success = saveCurrentPerformaInternal(currentPerforma);
+    const normalizedId = normalizePerformaIdInput(
+      currentPerforma.id,
+      activePerformas,
+      activeWorkbook?.locationName || 'Dolvan'
+    );
+    const updatedRec = { ...currentPerforma, id: normalizedId };
+    const success = saveCurrentPerformaInternal(updatedRec);
     if (!success) return;
 
-    const updatedPerformas = [...activePerformas];
-    const existingIndex = originalEditingId 
-      ? updatedPerformas.findIndex(p => p.id.trim().toLowerCase() === originalEditingId.trim().toLowerCase())
-      : -1;
-
-    if (existingIndex >= 0) {
-      updatedPerformas[existingIndex] = currentPerforma;
-    } else {
-      updatedPerformas.push(currentPerforma);
-    }
+    const updatedPerformas = sortPerformasBySequence([
+      ...activePerformas.filter(p => p.id.trim().toLowerCase() !== normalizedId.toLowerCase()),
+      updatedRec
+    ]);
 
     const nextId = getNextPerformaId(updatedPerformas, activeWorkbook.locationName);
-    const freshPerforma = createBlankPerforma(nextId, currentPerforma.location || '');
-    freshPerforma.date = currentPerforma.date;
+    const freshPerforma = createBlankPerforma(nextId, updatedRec.location || '');
+    freshPerforma.date = updatedRec.date;
 
     setCurrentPerforma(freshPerforma);
     setOriginalEditingId(null);
     setDuplicateError(null);
     initHistory(freshPerforma);
 
-    showNotification(`Performa ${currentPerforma.id} saved! Now entering ${nextId}`, 'info');
+    showNotification(`Performa ${normalizedId} saved to Excel! Now entering ${nextId}`, 'info');
   };
 
   // Action: + Add New Performa
@@ -454,14 +484,14 @@ export function App() {
     }
   };
 
-  // Delete performa with confirmation
-  const handleDeletePerforma = (idToDelete?: string) => {
-    const targetId = idToDelete || currentPerforma.id;
-    if (!window.confirm(`Are you sure you want to delete Performa ${targetId}?`)) {
+  // Delete performa with confirmation & physical DB cleanup
+  const handleDeletePerforma = async (idToDelete?: string) => {
+    const targetId = (idToDelete || currentPerforma.id).trim();
+    if (!window.confirm(`Are you sure you want to permanently delete Performa ${targetId} from the database?`)) {
       return;
     }
 
-    const filtered = activePerformas.filter(p => p.id !== targetId);
+    const filtered = activePerformas.filter(p => p.id.trim().toLowerCase() !== targetId.toLowerCase());
     const updatedWorkbook: LocationWorkbook = {
       ...activeWorkbook,
       sheets: {
@@ -480,16 +510,24 @@ export function App() {
     );
 
     setWorkbooks(updatedWorkbooks);
-    saveWorkbookToStorage(updatedWorkbook);
+    await deletePerformaFromStorage(activeWorkbook.locationId, targetId, updatedWorkbook);
+    clearUnsavedDraft();
 
-    // Next entry continues from highest Sr No
-    const nextId = getNextPerformaId(filtered, activeWorkbook.locationName);
-    const fresh = createBlankPerforma(nextId, '');
-    setCurrentPerforma(fresh);
-    setOriginalEditingId(null);
-    initHistory(fresh);
+    // Next entry continues from remaining Performas or opens first available record
+    if (filtered.length > 0 && targetId.toLowerCase() === currentPerforma.id.trim().toLowerCase()) {
+      const nextToSelect = filtered[filtered.length - 1];
+      setCurrentPerforma({ ...nextToSelect });
+      setOriginalEditingId(nextToSelect.id);
+      initHistory(nextToSelect);
+    } else if (filtered.length === 0) {
+      const nextId = getNextPerformaId([], activeWorkbook.locationName);
+      const fresh = createBlankPerforma(nextId, '');
+      setCurrentPerforma(fresh);
+      setOriginalEditingId(null);
+      initHistory(fresh);
+    }
 
-    showNotification(`Deleted Performa ${targetId}`, 'info');
+    showNotification(`Permanently deleted Performa ${targetId} from Database & reclaimed storage`, 'info');
   };
 
   // Update Bill Sheet
@@ -854,7 +892,27 @@ export function App() {
             {mainViewTab === 'form' ? (
               <A4PerformaDocument
                 performa={currentPerforma}
+                existingPerformas={activePerformas}
+                locationName={activeWorkbook?.locationName || 'Dolvan'}
                 onChange={handlePerformaChange}
+                onSelectExistingPerforma={(matchedRec) => {
+                  setCurrentPerforma(JSON.parse(JSON.stringify(matchedRec)));
+                  setOriginalEditingId(matchedRec.id);
+                  setDuplicateError(null);
+                  initHistory(matchedRec);
+                }}
+                onStartNewWithId={(typedId) => {
+                  // If user was editing an existing record and typed a brand-new ID, switch to new record mode with blank form so they don't overwrite the old record
+                  if (originalEditingId && originalEditingId.trim().toLowerCase() !== typedId.trim().toLowerCase()) {
+                    const fresh = createBlankPerforma(typedId, currentPerforma.location || '');
+                    fresh.date = currentPerforma.date;
+                    setCurrentPerforma(fresh);
+                    setOriginalEditingId(null);
+                    setDuplicateError(null);
+                  } else {
+                    setOriginalEditingId(null);
+                  }
+                }}
                 onSaveAndAddAnother={handleSaveAndAddAnother}
                 onSaveAndClose={handleSaveAndClose}
                 onDelete={() => handleDeletePerforma(currentPerforma.id)}

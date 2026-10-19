@@ -14,6 +14,9 @@ export interface VoltageAmpereReading {
   voltageRN: string;
   voltageYN: string;
   voltageBN: string;
+  voltageRY?: string;
+  voltageYB?: string;
+  voltageBR?: string;
   ampereR: string;
   ampereY: string;
   ampereB: string;
@@ -184,6 +187,9 @@ export function createBlankPerforma(id: string, location: string = ''): Performa
       voltageRN: '0',
       voltageYN: '0',
       voltageBN: '0',
+      voltageRY: '0',
+      voltageYB: '0',
+      voltageBR: '0',
       ampereR: '0',
       ampereY: '0',
       ampereB: '0',
