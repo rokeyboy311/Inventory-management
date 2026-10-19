@@ -37,8 +37,6 @@ import {
   BillSheetDefinition
 } from './types/performa';
 
-import { Team } from './types/team';
-
 import { 
   getNextPerformaId, 
   checkDuplicatePerformaId,
@@ -55,8 +53,6 @@ import {
   getUnsavedDraft, 
   clearUnsavedDraft,
   createNewLocationWorkbookWithDualSheets,
-  loadTeamsFromStorage,
-  saveTeamToStorage,
   syncBroadcastChannel,
   UnsavedDraftState
 } from './utils/storage';
@@ -83,7 +79,6 @@ import { ExcelDataTable } from './components/ExcelDataTable';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { PWAInstallModal } from './components/PWAInstallModal';
 import { ExportReferenceModal } from './components/ExportReferenceModal';
-import { AdminPanel } from './components/admin/AdminPanel';
 import { UserDashboard } from './components/user/UserDashboard';
 import { BillSheetViewer } from './components/BillSheetViewer';
 import { SupabaseSettingsModal } from './components/admin/SupabaseSettingsModal';
@@ -93,45 +88,17 @@ import { RefreshCw } from 'lucide-react';
 
 export function App() {
   // -------------------------------------------------------------
-  // Route Management: /admin vs /
+  // Clean URL: Redirect any legacy /admin path to /
   // -------------------------------------------------------------
-  const [currentRoute, setCurrentRoute] = useState<'user' | 'admin'>(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.pathname.startsWith('/admin') || window.location.hash === '#admin') {
-        return 'admin';
-      }
-    }
-    return 'user';
-  });
-
-  const navigateTo = (path: string) => {
-    if (typeof window !== 'undefined') {
-      window.history.pushState(null, '', path);
-      if (path.startsWith('/admin') || path === '#admin') {
-        setCurrentRoute('admin');
-      } else {
-        setCurrentRoute('user');
-      }
-    }
-  };
-
   useEffect(() => {
-    const handlePopState = () => {
-      if (window.location.pathname.startsWith('/admin') || window.location.hash === '#admin') {
-        setCurrentRoute('admin');
-      } else {
-        setCurrentRoute('user');
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    if (typeof window !== 'undefined' && (window.location.pathname.startsWith('/admin') || window.location.hash === '#admin')) {
+      window.history.replaceState(null, '', '/');
+    }
   }, []);
 
   // -------------------------------------------------------------
-  // Core State: Teams & Workbooks
+  // Core State: Location Workbooks
   // -------------------------------------------------------------
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [isWorkbookOpen, setIsWorkbookOpen] = useState(false);
 
   // All workbooks / locations
@@ -221,14 +188,8 @@ export function App() {
   // Initial Data Loading & Real-time Sync
   // -------------------------------------------------------------
   const reloadData = async () => {
-    const loadedTeams = await loadTeamsFromStorage();
     const loadedWorkbooks = await loadWorkbooksFromStorage();
-    setTeams(loadedTeams);
     setWorkbooks(loadedWorkbooks);
-    setSelectedTeam(prev => {
-      if (!prev) return null;
-      return loadedTeams.find(t => t.id === prev.id) || null;
-    });
   };
 
   useEffect(() => {
@@ -245,10 +206,13 @@ export function App() {
     };
     syncBroadcastChannel?.addEventListener('message', handleBroadcast);
 
-    // 3. Cloud polling heartbeat every 6 seconds to ensure complete sync
+    // 3. Cloud polling heartbeat every 10 seconds to ensure complete sync across devices
     const syncHeartbeat = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return; // save mobile battery & data when tab is minimized/screen off
+      }
       reloadData();
-    }, 6000);
+    }, 10000);
 
     return () => {
       if (unsubscribeRealtime) unsubscribeRealtime();
@@ -303,8 +267,7 @@ export function App() {
   // Location Excel Creation (Dual Sheets: inventory + bill)
   // -------------------------------------------------------------
   const handleCreateLocationWorkbook = async (locationName: string) => {
-    const teamId = selectedTeam ? selectedTeam.id : (teams[0]?.id || 'team-dolvan-maintenance');
-    const newWb = createNewLocationWorkbookWithDualSheets(locationName, teamId);
+    const newWb = createNewLocationWorkbookWithDualSheets(locationName);
     const updated = [...workbooks, newWb];
     setWorkbooks(updated);
     setActiveLocationId(newWb.locationId);
@@ -588,42 +551,14 @@ export function App() {
   };
 
   // -------------------------------------------------------------
-  // ROUTE 1: ADMIN PANEL (/admin)
-  // -------------------------------------------------------------
-  if (currentRoute === 'admin') {
-    return (
-      <AdminPanel
-        onNavigateToUser={(teamId) => {
-          navigateTo('/');
-          if (teamId) {
-            const found = teams.find(t => t.id === teamId);
-            if (found) {
-              setSelectedTeam(found);
-              setIsWorkbookOpen(false);
-            }
-          }
-        }}
-      />
-    );
-  }
-
-  // -------------------------------------------------------------
-  // ROUTE 2: USER DASHBOARD (/) - TEAM & EXCEL SELECTION
+  // ROUTE 1: USER DASHBOARD (/) - LOCATION EXCELS WORKSTATION
   // -------------------------------------------------------------
   if (!isWorkbookOpen) {
     return (
       <>
         <SupabaseSyncBanner onSyncReady={reloadData} onOpenSettingsModal={() => setIsSupabaseModalOpen(true)} />
         <UserDashboard
-          teams={teams}
           workbooks={workbooks}
-          selectedTeam={selectedTeam}
-          onSelectTeam={(team) => {
-            setSelectedTeam(team);
-          }}
-          onClearSelectedTeam={() => {
-            setSelectedTeam(null);
-          }}
           onOpenWorkbook={(wb) => {
             setActiveLocationId(wb.locationId);
             const targetSheet = wb.sheets['inventory'] ? 'inventory' : Object.keys(wb.sheets)[0];
@@ -652,7 +587,7 @@ export function App() {
             setWorkbooks(reloaded);
             showNotification('Location Excel deleted.');
           }}
-          onNavigateToAdmin={() => navigateTo('/admin')}
+          onRefreshData={reloadData}
         />
 
         {/* Create Location Modal */}
@@ -667,7 +602,7 @@ export function App() {
   }
 
   // -------------------------------------------------------------
-  // ROUTE 3: LOCATION EXCEL WORKSPACE (Performa CRUD + Dual Sheets)
+  // ROUTE 2: LOCATION EXCEL WORKSPACE (Performa CRUD + Dual Sheets)
   // -------------------------------------------------------------
   const isBillSheet = activeSheetName === 'bill';
 
@@ -701,7 +636,7 @@ export function App() {
                 </span>
               </div>
               <p className="text-[10px] text-slate-400">
-                Team: <strong className="text-emerald-400">{selectedTeam?.name || 'Dolvan Maintenance Team'}</strong>
+                Sheets: <span className="text-emerald-400 font-semibold">inventory (Sheet 1)</span> &amp; <span className="text-cyan-400 font-semibold">bill (Sheet 2)</span>
               </p>
             </div>
           </div>

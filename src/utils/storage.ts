@@ -223,7 +223,7 @@ export async function deleteTeamFromStorage(teamId: string): Promise<void> {
 // Location Workbook Storage (Supabase Master Database)
 // -------------------------------------------------------------
 
-export function createNewLocationWorkbookWithDualSheets(locationName: string, teamId: string): LocationWorkbook {
+export function createNewLocationWorkbookWithDualSheets(locationName: string, teamId: string = 'default'): LocationWorkbook {
   const trimmedLoc = locationName.trim();
   const locId = trimmedLoc.toLowerCase().replace(/[^a-z0-9]+/g, '_');
   
@@ -261,12 +261,12 @@ export function createNewLocationWorkbookWithDualSheets(locationName: string, te
   };
 }
 
-export function createInitialWorkbook(locationName: string = 'Dolvan', teamId: string = 'team-dolvan-maintenance'): LocationWorkbook {
+export function createInitialWorkbook(locationName: string = 'Dolvan', teamId: string = 'default'): LocationWorkbook {
   return createNewLocationWorkbookWithDualSheets(locationName, teamId);
 }
 
 export function createNewLocationWorkbook(locationName: string): LocationWorkbook {
-  return createNewLocationWorkbookWithDualSheets(locationName, 'team-dolvan-maintenance');
+  return createNewLocationWorkbookWithDualSheets(locationName, 'default');
 }
 
 /**

@@ -292,9 +292,9 @@ export function mapPerformaToDolvanRow(performa: PerformaRecord, index: number):
     performa.capacity || '',                                         // 5: TC Capacity
     getSingleQty('1.1'),                                             // 6: Bushing goti HT
     getSingleQty('1'),                                               // 7: Bushing goti LT
-    '',                                                              // 8: AL. Patta 100
-    getSingleQty('2.1'),                                             // 9: AL. Patta 200
-    '',                                                              // 10: AL. Patta 500
+    getSizeQty('2.1', '100'),                                        // 8: AL. Patta 100
+    getSizeQty('2.1', '200') || getSingleQty('2.1'),                 // 9: AL. Patta 200
+    getSizeQty('2.1', '500'),                                        // 10: AL. Patta 500
     getSingleQty('3'),                                               // 11: Earth Connection
     getSizeQty('4', 'Nos.'),                                         // 12: LT cable Nos.
     getSizeQty('4', 'C-1(70)'),                                      // 13: C- 1(70)
@@ -303,7 +303,7 @@ export function mapPerformaToDolvanRow(performa: PerformaRecord, index: number):
     getCombinedSizesQty('6', ['25', '50', '70']),                    // 16: Termination 70 (25/50/70)
     getCombinedSizesQty('6.1', ['95', '120', '150']),                // 17: Termination 150 (95/120/150)
     getSizeQty('6.2', '185') || getSingleQty('6.2'),                 // 18: Termination 185
-    '',                                                              // 19: Termination 240
+    getSizeQty('6.2', '240') || getSizeQty('6', '240'),              // 19: Termination 240
     getSingleQty('7'),                                               // 20: Oil leakage
     0,                                                               // 21: Oil Ltr
     getCombinedSizesQty('9.1', ['Up to 100 Amp', 'Above 100 Amp']) || getSingleQty('9'), // 22: Dist Box
@@ -325,8 +325,8 @@ export function mapPerformaToDolvanRow(performa: PerformaRecord, index: number):
     getSizeQty('17', '20MM'),                                        // 38: Brass Washer 20mm
     getSizeQty('17', '30MM'),                                        // 39: Brass Washer 30mm
     getSingleQty('18'),                                              // 40: Breather
-    '',                                                              // 41: HALF STUD 12 MM
-    getSingleQty('2')                                                // 42: HALF STUD 20 MM
+    getSizeQty('2', '12MM'),                                         // 41: HALF STUD 12 MM
+    getSizeQty('2', '20MM') || getSingleQty('2')                     // 42: HALF STUD 20 MM
   ];
 }
 
