@@ -143,7 +143,7 @@ IMPORTANT OCR RULES FOR HANDWRITTEN ROWS:
       }
     };
 
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash'];
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest'];
     let lastError: unknown = null;
     let rawText = '';
 

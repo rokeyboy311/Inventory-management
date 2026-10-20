@@ -817,6 +817,8 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
     try {
       const { imageBase64, mimeType } = await compressImageForScan(file);
 
+      let extracted: any = null;
+
       const res = await fetch('/api/ai/scan-performa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -836,7 +838,8 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
         throw new Error(json.error || 'Could not parse performa photo');
       }
 
-      const extracted = json.data || {};
+      extracted = json.data || {};
+
       const nextItems = ensureCompleteMasterItems([]);
       let scannedRowsCount = 0;
 
