@@ -12,11 +12,13 @@ import {
   Database,
   MapPin,
   RefreshCw,
-  FileCheck
+  FileCheck,
+  Sliders
 } from 'lucide-react';
 import { LocationWorkbook } from '../../types/performa';
 import { exportDualSheetLocationExcel } from '../../utils/dolvanTemplate';
 import { SupabaseSettingsModal } from '../admin/SupabaseSettingsModal';
+import { ItemsSettingsModal } from '../ItemsSettingsModal';
 import { getSupabaseSyncStatus } from '../../utils/supabaseClient';
 
 interface UserDashboardProps {
@@ -36,6 +38,7 @@ export function UserDashboard({
 }: UserDashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isItemsSettingsModalOpen, setIsItemsSettingsModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const q = searchQuery.toLowerCase().trim();
@@ -106,6 +109,17 @@ export function UserDashboard({
             </button>
           )}
 
+          {/* Items Settings (Master Template) Button */}
+          <button
+            type="button"
+            onClick={() => setIsItemsSettingsModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            title="Configure Default Performa Items (Add, Edit, Remove)"
+          >
+            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">Items Settings</span>
+          </button>
+
           {/* Supabase SQL Database Config Button */}
           <button
             type="button"
@@ -134,6 +148,13 @@ export function UserDashboard({
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
         onConnectionChanged={onRefreshData}
+      />
+
+      {/* Items Settings Modal */}
+      <ItemsSettingsModal
+        isOpen={isItemsSettingsModalOpen}
+        onClose={() => setIsItemsSettingsModalOpen(false)}
+        onItemsUpdated={onRefreshData}
       />
 
       {/* Main Container */}

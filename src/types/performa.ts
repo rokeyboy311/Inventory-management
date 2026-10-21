@@ -454,9 +454,24 @@ export function computeSummaryQtyFromSizes(
  * is normalized to the 23-item master structure with all `sizeFields` and `sizeQtys` intact.
  */
 export function ensureCompleteMasterItems(existingItems: MaintenanceItemRow[] = []): MaintenanceItemRow[] {
-  const result: MaintenanceItemRow[] = DEFAULT_PERFORMA_ITEMS_TEMPLATE.map((tpl, idx) => ({
+  let masterTemplates: Omit<MaintenanceItemRow, 'id'>[] = DEFAULT_PERFORMA_ITEMS_TEMPLATE;
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('dgvcl_custom_master_items_v3');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          masterTemplates = parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const result: MaintenanceItemRow[] = masterTemplates.map((tpl, idx) => ({
     ...tpl,
-    id: `item-${tpl.srNo}-${tpl.subIndex || 1}-${idx}`,
+    id: `item-${tpl.srNo || idx + 1}-${tpl.subIndex || 1}-${idx}`,
     materialYes: false,
     labourYes: false,
     qty: '',
@@ -485,7 +500,6 @@ export function ensureCompleteMasterItems(existingItems: MaintenanceItemRow[] = 
     if (src.labourYes) target.labourYes = true;
 
     if (target.sizeFields && target.sizeQtys) {
-      // If source already has sizeQtys, copy matching keys
       if (src.sizeQtys && typeof src.sizeQtys === 'object') {
         for (const sf of target.sizeFields) {
           if (isNonZeroQtyValue(src.sizeQtys[sf])) {
@@ -497,7 +511,6 @@ export function ensureCompleteMasterItems(existingItems: MaintenanceItemRow[] = 
           target.sizeQtys[specificSizeKey] = src.qty;
         }
       } else if (isNonZeroQtyValue(src.qty)) {
-        // Put in first size field if no specific size key matched
         const firstKey = target.sizeFields[0];
         if (firstKey && !isNonZeroQtyValue(target.sizeQtys[firstKey])) {
           target.sizeQtys[firstKey] = src.qty;
@@ -516,6 +529,21 @@ export function ensureCompleteMasterItems(existingItems: MaintenanceItemRow[] = 
       }
     }
   };
+
+  // Direct label/description matching for user-customized items
+  for (const src of existingItems) {
+    if (!src) continue;
+    const sLabel = (src.srLabel || '').trim();
+    const sDesc = (src.description || '').trim().toLowerCase();
+
+    const directIdx = result.findIndex(r => 
+      (sLabel && r.srLabel && r.srLabel.trim() === sLabel) ||
+      (sDesc && r.description && r.description.trim().toLowerCase() === sDesc)
+    );
+    if (directIdx >= 0) {
+      applyToTarget(directIdx, src);
+    }
+  }
 
   for (const src of existingItems) {
     if (!src) continue;

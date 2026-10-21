@@ -34,7 +34,8 @@ import {
   ImportSummary, 
   createBlankPerforma,
   DEFAULT_PERFORMA_ITEMS_TEMPLATE,
-  BillSheetDefinition
+  BillSheetDefinition,
+  ensureCompleteMasterItems
 } from './types/performa';
 
 import { 
@@ -82,9 +83,11 @@ import { ExportReferenceModal } from './components/ExportReferenceModal';
 import { UserDashboard } from './components/user/UserDashboard';
 import { BillSheetViewer } from './components/BillSheetViewer';
 import { SupabaseSettingsModal } from './components/admin/SupabaseSettingsModal';
+import { ItemsSettingsModal } from './components/ItemsSettingsModal';
 import { SupabaseSyncBanner } from './components/SupabaseSyncBanner';
 import { subscribeToDatabaseChanges, isSupabaseConnected, getSupabaseSyncStatus } from './utils/supabaseClient';
-import { RefreshCw } from 'lucide-react';
+import { syncBillFromInventory } from './utils/billSync';
+import { RefreshCw, Sliders } from 'lucide-react';
 
 export function App() {
   // -------------------------------------------------------------
@@ -103,7 +106,7 @@ export function App() {
 
   // All workbooks / locations
   const [workbooks, setWorkbooks] = useState<LocationWorkbook[]>([]);
-  const [activeLocationId, setActiveLocationId] = useState<string>('dolvan');
+  const [activeLocationId, setActiveLocationId] = useState<string>('');
   const [activeSheetName, setActiveSheetName] = useState<string>('inventory');
 
   // Main view tab: 'form' (A4 document) vs 'table' (Excel sheet data table) vs 'files' (Mobile sidebar)
@@ -111,6 +114,7 @@ export function App() {
 
   // Modals
   const [isCreateLocationModalOpen, setIsCreateLocationModalOpen] = useState(false);
+  const [isItemsSettingsModalOpen, setIsItemsSettingsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isExportReferenceModalOpen, setIsExportReferenceModalOpen] = useState(false);
@@ -118,7 +122,7 @@ export function App() {
 
   // Active performa currently in the A4 editor
   const [currentPerforma, setCurrentPerforma] = useState<PerformaRecord>(() => 
-    createBlankPerforma('DOL-001', '')
+    createBlankPerforma('TC-001', '')
   );
 
   // Original ID of current performa if editing an existing record
@@ -190,6 +194,12 @@ export function App() {
   const reloadData = async () => {
     const loadedWorkbooks = await loadWorkbooksFromStorage();
     setWorkbooks(loadedWorkbooks);
+    if (loadedWorkbooks.length > 0) {
+      setActiveLocationId(prev => {
+        const exists = loadedWorkbooks.some(w => w.locationId === prev);
+        return exists && prev ? prev : loadedWorkbooks[0].locationId;
+      });
+    }
   };
 
   useEffect(() => {
@@ -342,6 +352,10 @@ export function App() {
 
     const sortedPerformas = sortPerformasBySequence(nextPerformas);
 
+    // Auto-sync Sheet 2 (bill) with all materials in Sheet 1 (inventory)
+    const existingBillData = activeWorkbook.sheets['bill']?.billData;
+    const syncedBill = syncBillFromInventory(sortedPerformas, activeWorkbook.locationName, existingBillData);
+
     // Update workbook
     const updatedSheets = {
       ...activeWorkbook.sheets,
@@ -349,6 +363,14 @@ export function App() {
         ...activeSheet,
         performas: sortedPerformas,
         rawRowsCount: sortedPerformas.length
+      },
+      'bill': {
+        name: 'bill',
+        type: 'bill' as const,
+        performas: [],
+        billData: syncedBill,
+        isCompatible: true,
+        rawRowsCount: syncedBill.items.length
       }
     };
 
@@ -456,6 +478,9 @@ export function App() {
     }
 
     const filtered = activePerformas.filter(p => p.id.trim().toLowerCase() !== targetId.toLowerCase());
+    const existingBillData = activeWorkbook.sheets['bill']?.billData;
+    const syncedBill = syncBillFromInventory(filtered, activeWorkbook.locationName, existingBillData);
+
     const updatedWorkbook: LocationWorkbook = {
       ...activeWorkbook,
       sheets: {
@@ -464,6 +489,14 @@ export function App() {
           ...activeSheet,
           performas: filtered,
           rawRowsCount: filtered.length
+        },
+        'bill': {
+          name: 'bill',
+          type: 'bill' as const,
+          performas: [],
+          billData: syncedBill,
+          isCompatible: true,
+          rawRowsCount: syncedBill.items.length
         }
       },
       lastModified: new Date().toISOString()
@@ -629,7 +662,7 @@ export function App() {
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-extrabold text-sm sm:text-base text-white tracking-tight">
-                  {activeWorkbook?.locationName || 'DOLVAN'}
+                  {activeWorkbook?.locationName || 'Location'}
                 </span>
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   {activeWorkbook?.workbookName}
@@ -706,11 +739,22 @@ export function App() {
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
 
+          {/* Items Settings Button */}
+          <button
+            type="button"
+            onClick={() => setIsItemsSettingsModalOpen(true)}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-cyan-400 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-600 cursor-pointer"
+            title="Configure Default Performa Items (Add, Edit, Remove)"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Items Settings</span>
+          </button>
+
           {/* Supabase SQL Database Config */}
           <button
             type="button"
             onClick={() => setIsSupabaseModalOpen(true)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-emerald-400 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-600"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-emerald-400 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-600 cursor-pointer"
             title="Configure Supabase SQL connection and open permissions"
           >
             <Database className="w-3.5 h-3.5" />
@@ -723,11 +767,11 @@ export function App() {
             onClick={() => {
               if (activeWorkbook) {
                 exportDualSheetLocationExcel(activeWorkbook);
-                showNotification(`Downloaded ${activeWorkbook.locationName}_INVENTORY_BILL.xlsx`);
+                showNotification(`Downloaded ${activeWorkbook.locationName}.xlsx`);
               }
             }}
-            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition-colors"
-            title="Download Excel with both sheets"
+            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Download Excel with both sheets (inventory and bill)"
           >
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Export Excel</span>
@@ -737,7 +781,7 @@ export function App() {
           <button
             type="button"
             onClick={handlePrint}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Print</span>
@@ -756,10 +800,11 @@ export function App() {
         )}
 
         {isBillSheet ? (
-          // Sheet 2: Bill Viewer
+          // Sheet 2: Bill Viewer (automatically populated with materials added in inventory)
           <BillSheetViewer
             billData={activeWorkbook?.sheets['bill']?.billData || createDefaultBillSheet(activeWorkbook?.locationName || 'Location')}
             locationName={activeWorkbook?.locationName || 'Location'}
+            performas={activePerformas}
             onUpdateBill={handleUpdateBillSheet}
           />
         ) : (
@@ -851,7 +896,7 @@ export function App() {
             ) : (
               <ExcelDataTable
                 workbookName={activeWorkbook?.workbookName || 'Workbook.xlsx'}
-                sheetName="inventory (DOLVAN)"
+                sheetName={`inventory (${activeWorkbook?.locationName || 'Location'})`}
                 performas={activePerformas}
                 onEditPerforma={(id) => {
                   handleSelectPerforma(id);
@@ -883,6 +928,19 @@ export function App() {
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
         onConnectionChanged={reloadData}
+      />
+
+      <ItemsSettingsModal
+        isOpen={isItemsSettingsModalOpen}
+        onClose={() => setIsItemsSettingsModalOpen(false)}
+        onItemsUpdated={() => {
+          reloadData();
+          // Update current performa items if actively open in form
+          setCurrentPerforma(prev => ({
+            ...prev,
+            items: ensureCompleteMasterItems(prev.items)
+          }));
+        }}
       />
     </div>
   );

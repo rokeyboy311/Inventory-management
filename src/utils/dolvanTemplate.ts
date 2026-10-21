@@ -8,6 +8,7 @@ import {
   isNonZeroQtyValue,
   computeSummaryQtyFromSizes
 } from '../types/performa';
+import { syncBillFromInventory } from './billSync';
 
 /**
  * Exact Column Specification for DOLVAN INVENTERY.xlsx -> Sheet1 (43 columns)
@@ -406,6 +407,7 @@ export function buildBillWorksheet(billData?: BillSheetDefinition): XLSX.WorkShe
 
 /**
  * Exports a dual-sheet Excel file containing both 'inventory' and 'bill' sheets!
+ * Filename matches the exact location name, and Sheet 2 (bill) reflects all material added in Sheet 1 (inventory).
  */
 export function exportDualSheetLocationExcel(workbook: LocationWorkbook): string {
   const wb = XLSX.utils.book_new();
@@ -415,12 +417,14 @@ export function exportDualSheetLocationExcel(workbook: LocationWorkbook): string
   const wsInventory = buildDolvanSheet1Worksheet(performas);
   XLSX.utils.book_append_sheet(wb, wsInventory, 'inventory');
 
-  const billSheetDef = workbook.sheets['bill'];
-  const wsBill = buildBillWorksheet(billSheetDef?.billData);
+  // Sheet 2: bill - auto-synced with all material added in inventory
+  const existingBill = workbook.sheets['bill']?.billData;
+  const syncedBill = syncBillFromInventory(performas, workbook.locationName, existingBill);
+  const wsBill = buildBillWorksheet(syncedBill);
   XLSX.utils.book_append_sheet(wb, wsBill, 'bill');
 
   const cleanLoc = (workbook.locationName || 'LOCATION').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
-  const fileName = `${cleanLoc}_INVENTORY_BILL.xlsx`;
+  const fileName = `${cleanLoc}.xlsx`;
   XLSX.writeFile(wb, fileName);
   return fileName;
 }

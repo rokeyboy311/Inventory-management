@@ -66,10 +66,10 @@ export const ExportReferenceModal: React.FC<ExportReferenceModalProps> = ({
               <div className="flex items-center space-x-2">
                 <h3 className="font-extrabold text-base tracking-tight">Export as Reference Excel</h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-400 text-slate-950 uppercase tracking-widest">
-                  DOLVAN Template
+                  {locationName || 'Location'} Layout
                 </span>
               </div>
-              <p className="text-xs text-emerald-200">Replicating DOLVAN INVENTERY.xlsx Sheet1 structure</p>
+              <p className="text-xs text-emerald-200">Replicating DISCOM Master Reference Excel Sheet1 structure</p>
             </div>
           </div>
           <button

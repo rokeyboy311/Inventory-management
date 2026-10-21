@@ -1,6 +1,8 @@
-import { LocationWorkbook, PerformaRecord } from '../types/performa';
+import { LocationWorkbook, PerformaRecord, ensureCompleteMasterItems } from '../types/performa';
 import { Team } from '../types/team';
 import { createDolvanSamplePerforma, createDefaultBillSheet } from './dolvanTemplate';
+import { getDefaultPrefixForLocation } from './idGenerator';
+import { syncBillFromInventory } from './billSync';
 import { 
   fetchTeamsFromSupabase, 
   upsertTeamSupabase, 
@@ -225,26 +227,54 @@ export async function deleteTeamFromStorage(teamId: string): Promise<void> {
 
 export function createNewLocationWorkbookWithDualSheets(locationName: string, teamId: string = 'default'): LocationWorkbook {
   const trimmedLoc = locationName.trim();
-  const locId = trimmedLoc.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-  
-  const samplePerforma = createDolvanSamplePerforma();
-  samplePerforma.location = trimmedLoc;
-  samplePerforma.transformerRefNo = `TR-${trimmedLoc.toUpperCase()}-52`;
+  const cleanLoc = trimmedLoc.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_') || 'LOCATION';
+  const locId = `loc_${cleanLoc.toLowerCase()}_${Date.now()}`;
+  const prefix = getDefaultPrefixForLocation(trimmedLoc);
+  const year = new Date().getFullYear();
 
-  const defaultBill = createDefaultBillSheet(trimmedLoc);
-  defaultBill.contractorName = 'DGVCL Authorized Electrical Maintenance Contractor';
+  // Create initial performa specifically for this location
+  const initialPerforma: PerformaRecord = {
+    id: `${prefix}001`,
+    date: new Date().toISOString().slice(0, 10),
+    location: trimmedLoc,
+    transformerRefNo: `TR-${prefix}01`,
+    transformerMake: 'Aman',
+    transformerSerialNo: '01',
+    capacity: '100',
+    division: 'ANKLESHWAR IND DIVISION',
+    subDivision: 'ANKLESHWAR GIDC SDN',
+    performaNo: `${prefix}001`,
+    workOrderNo: `WO/DGVCL/${cleanLoc.toUpperCase()}/${year}/001`,
+    serviceOrderNo: `SO/DGVCL/${cleanLoc.toUpperCase()}/${year}/001`,
+    measurements: {
+      voltageRN: '230',
+      voltageYN: '230',
+      voltageBN: '230',
+      ampereR: '0',
+      ampereY: '0',
+      ampereB: '0',
+      ampereN: '0'
+    },
+    items: ensureCompleteMasterItems([]),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    status: 'saved'
+  };
+
+  // Sheet 2 (bill) automatically reflects items from Sheet 1 (inventory)
+  const initialBill = syncBillFromInventory([initialPerforma], trimmedLoc);
 
   return {
     locationId: locId,
     teamId,
     locationName: trimmedLoc,
-    workbookName: `${trimmedLoc}.xlsx`,
+    workbookName: `${cleanLoc}.xlsx`,
     activeSheetName: 'inventory',
     sheets: {
       'inventory': {
         name: 'inventory',
         type: 'inventory',
-        performas: [samplePerforma],
+        performas: [initialPerforma],
         isCompatible: true,
         rawRowsCount: 1
       },
@@ -252,9 +282,9 @@ export function createNewLocationWorkbookWithDualSheets(locationName: string, te
         name: 'bill',
         type: 'bill',
         performas: [],
-        billData: defaultBill,
+        billData: initialBill,
         isCompatible: true,
-        rawRowsCount: defaultBill.items.length
+        rawRowsCount: initialBill.items.length
       }
     },
     lastModified: new Date().toISOString()

@@ -7,20 +7,22 @@ import {
   DollarSign, 
   Building2, 
   Calendar, 
-  FileText,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react';
-import { BillSheetDefinition, BillItem } from '../types/performa';
+import { BillSheetDefinition, BillItem, PerformaRecord } from '../types/performa';
 import { createDefaultBillSheet } from '../utils/dolvanTemplate';
+import { syncBillFromInventory } from '../utils/billSync';
 
 interface BillSheetViewerProps {
   billData: BillSheetDefinition;
   locationName: string;
+  performas?: PerformaRecord[];
   onUpdateBill: (updated: BillSheetDefinition) => void;
 }
 
-export function BillSheetViewer({ billData, locationName, onUpdateBill }: BillSheetViewerProps) {
+export function BillSheetViewer({ billData, locationName, performas = [], onUpdateBill }: BillSheetViewerProps) {
   const [bill, setBill] = useState<BillSheetDefinition>(billData);
   const [showSavedToast, setShowSavedToast] = useState(false);
 
@@ -118,6 +120,14 @@ export function BillSheetViewer({ billData, locationName, onUpdateBill }: BillSh
     onUpdateBill(updated);
   };
 
+  const handleSyncFromInventory = () => {
+    const synced = syncBillFromInventory(performas, locationName, bill);
+    setBill(synced);
+    onUpdateBill(synced);
+    setShowSavedToast(true);
+    setTimeout(() => setShowSavedToast(false), 2500);
+  };
+
   const handleResetDefaults = () => {
     if (window.confirm('Reset all bill items and rates to default DGVCL standard template?')) {
       const standard = createDefaultBillSheet(locationName);
@@ -142,11 +152,23 @@ export function BillSheetViewer({ billData, locationName, onUpdateBill }: BillSh
             Transformer Maintenance Billing & Estimates ({locationName})
           </h2>
           <p className="text-xs text-slate-400">
-            Live editable contractor billing schedule. Rates and totals update automatically.
+            Live editable contractor billing schedule. Automatically calculated from Inventory Sheet materials.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {performas.length > 0 && (
+            <button
+              type="button"
+              onClick={handleSyncFromInventory}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+              title="Aggregate and refresh materials directly from inventory performas"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Sync from Inventory</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleAddItem}
@@ -174,6 +196,26 @@ export function BillSheetViewer({ billData, locationName, onUpdateBill }: BillSh
             <Printer className="w-3.5 h-3.5 text-cyan-400" />
             <span>Print Bill</span>
           </button>
+        </div>
+      </div>
+
+      {/* Sync Status Notice */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-xs flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-slate-300">
+            <strong>Dual-Sheet Live Workflow:</strong> Materials consumed in <strong className="text-emerald-400">{locationName}</strong> Inventory ({performas.length} Performa{performas.length === 1 ? '' : 's'}) are automatically aggregated in this Bill Sheet.
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {showSavedToast && (
+            <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Synced!
+            </span>
+          )}
+          <span className="text-[11px] font-mono text-cyan-400 font-bold bg-cyan-950/40 px-2.5 py-1 rounded-lg border border-cyan-800/40">
+            {bill.items.length} Bill Items • ₹{bill.grandTotal.toLocaleString()}
+          </span>
         </div>
       </div>
 

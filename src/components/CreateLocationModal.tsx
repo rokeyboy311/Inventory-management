@@ -78,17 +78,17 @@ export const CreateLocationModal: React.FC<CreateLocationModalProps> = ({
             </div>
             {error && <p className="text-xs text-red-600 mt-1 font-medium">{error}</p>}
             <p className="text-[11px] text-slate-500 mt-2">
-              This will create <strong className="text-emerald-700 font-mono">{locationName.trim() ? `${locationName.trim()}.xlsx` : 'YourLocation.xlsx'}</strong> with 2 automatic sheets: <strong className="text-emerald-600">inventory</strong> (DOLVAN layout) and <strong className="text-cyan-600">bill</strong>.
+              This will create <strong className="text-emerald-700 font-mono">{locationName.trim() ? `${locationName.trim().replace(/\s+/g, '_')}.xlsx` : 'YourLocation.xlsx'}</strong> with 2 automatic sheets: <strong className="text-emerald-600">inventory</strong> and <strong className="text-cyan-600">bill</strong>.
             </p>
           </div>
 
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950 space-y-1">
             <div className="font-bold flex items-center space-x-1.5 text-emerald-800">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Automatic Dual-Sheet & Sample Setup:</span>
+              <span>Automatic Dual-Sheet Workflow:</span>
             </div>
             <p className="text-[11px] text-emerald-800">
-              Generated with Sheet 1 <strong className="font-mono">inventory</strong> pre-populated with DOLVAN reference sample data row (Jay Ganesh Plot 5733) and Sheet 2 <strong className="font-mono">bill</strong> for contractor item calculations.
+              Sheet 1 <strong className="font-mono">inventory</strong> contains default performa items for this location, and Sheet 2 <strong className="font-mono">bill</strong> automatically calculates all materials added in inventory.
             </p>
           </div>
 
