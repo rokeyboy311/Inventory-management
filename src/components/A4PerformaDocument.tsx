@@ -21,7 +21,6 @@ import {
   CheckCircle2,
   Sparkles,
   MapPin,
-  Gauge,
   Search,
   Eye,
   EyeOff,
@@ -173,25 +172,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   const capacityInputRef = useRef<HTMLInputElement>(null);
   const qtyInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const sizeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  // Voltage & Ampere input refs
-  const voltageRNRef = useRef<HTMLInputElement>(null);
-  const voltageYNRef = useRef<HTMLInputElement>(null);
-  const voltageBNRef = useRef<HTMLInputElement>(null);
-  const ampereRRef = useRef<HTMLInputElement>(null);
-  const ampereYRef = useRef<HTMLInputElement>(null);
-  const ampereBRef = useRef<HTMLInputElement>(null);
-  const ampereNRef = useRef<HTMLInputElement>(null);
-
-  const measurements = performa.measurements || {
-    voltageRN: '',
-    voltageYN: '',
-    voltageBN: '',
-    ampereR: '',
-    ampereY: '',
-    ampereB: '',
-    ampereN: ''
-  };
 
   // Previous performa for "Copy Previous Performa" macro
   const previousPerforma = useMemo(() => {
@@ -450,17 +430,11 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
       }
       if (posInVisible >= 0 && posInVisible < visibleRowIndices.length - 1) {
         focusRowFirstInput(visibleRowIndices[posInVisible + 1]);
-      } else {
-        voltageRNRef.current?.focus();
-        voltageRNRef.current?.select();
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (posInVisible >= 0 && posInVisible < visibleRowIndices.length - 1) {
         focusRowFirstInput(visibleRowIndices[posInVisible + 1]);
-      } else {
-        voltageRNRef.current?.focus();
-        voltageRNRef.current?.select();
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -655,90 +629,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
     }
   };
 
-  // ============================================================================
-  // FEATURE 5: FAST VOLTAGE & AMPERE BAR (ROWS 19 & 20)
-  // ============================================================================
-  const handleMeasurementChange = (
-    field: keyof PerformaRecord['measurements'],
-    value: string,
-    nextInputRef?: React.RefObject<HTMLInputElement | null>
-  ) => {
-    if (isReadOnly) return;
-    const updatedMeasurements = {
-      ...measurements,
-      [field]: value
-    };
 
-    const nextItems = [...items];
-    const sr8Idx = nextItems.findIndex(i => i.srLabel === '8' || i.srNo === 8);
-    if (sr8Idx >= 0 && value.trim() !== '' && value.trim() !== '0') {
-      nextItems[sr8Idx] = {
-        ...nextItems[sr8Idx],
-        materialYes: true,
-        labourYes: true,
-        qty: isNonZeroQtyValue(nextItems[sr8Idx].qty) ? nextItems[sr8Idx].qty : 1
-      };
-    }
-
-    onChange({
-      ...performa,
-      items: nextItems,
-      measurements: updatedMeasurements
-    });
-
-    if (
-      (field === 'voltageRN' || field === 'voltageYN' || field === 'voltageBN') &&
-      value.trim().length === 3 &&
-      nextInputRef?.current
-    ) {
-      nextInputRef.current.focus();
-      nextInputRef.current.select();
-    }
-  };
-
-  const handleApplyVoltagePreset = (
-    vRN: string,
-    vYN: string,
-    vBN: string,
-    aR?: string,
-    aY?: string,
-    aB?: string,
-    aN?: string
-  ) => {
-    if (isReadOnly) return;
-    const nextItems = [...items];
-    const sr8Idx = nextItems.findIndex(i => i.srLabel === '8' || i.srNo === 8);
-    if (sr8Idx >= 0) {
-      nextItems[sr8Idx] = {
-        ...nextItems[sr8Idx],
-        materialYes: true,
-        labourYes: true,
-        qty: isNonZeroQtyValue(nextItems[sr8Idx].qty) ? nextItems[sr8Idx].qty : 1
-      };
-    }
-
-    onChange({
-      ...performa,
-      items: nextItems,
-      measurements: {
-        ...measurements,
-        voltageRN: vRN,
-        voltageYN: vYN,
-        voltageBN: vBN,
-        ...(aR !== undefined ? { ampereR: aR } : {}),
-        ...(aY !== undefined ? { ampereY: aY } : {}),
-        ...(aB !== undefined ? { ampereB: aB } : {}),
-        ...(aN !== undefined ? { ampereN: aN } : {})
-      }
-    });
-
-    if (aR === undefined) {
-      setTimeout(() => {
-        ampereRRef.current?.focus();
-        ampereRRef.current?.select();
-      }, 30);
-    }
-  };
 
   // ============================================================================
   // FEATURE 7: 1-TAP AI PHOTO SCANNER (GALLERY IMAGE -> COMPRESS -> OCR FORM)
@@ -914,7 +805,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
       }
 
       const nextMeasurements = {
-        ...measurements,
+        ...(performa.measurements || {}),
         ...(extracted.measurements?.voltageRN ? { voltageRN: String(extracted.measurements.voltageRN).trim() } : {}),
         ...(extracted.measurements?.voltageYN ? { voltageYN: String(extracted.measurements.voltageYN).trim() } : {}),
         ...(extracted.measurements?.voltageBN ? { voltageBN: String(extracted.measurements.voltageBN).trim() } : {}),
@@ -1696,203 +1587,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
           </div>
         </div>
 
-        {/* ============================================================================
-            SECTION 4: FAST VOLTAGE & AMPERE BAR (ROWS 19 & 20)
-            Auto-advances on 3 digits & auto-marks [SR 8] Measurement = Yes, QTY = 1
-        ============================================================================ */}
-        <div className="border-2 border-slate-800 rounded-sm mb-4 text-xs overflow-hidden bg-slate-50">
-          {!isReadOnly && (
-            <div className="bg-slate-200 px-3 py-1.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 print:hidden">
-              <span className="text-[11px] font-extrabold text-slate-800 flex items-center gap-1.5">
-                <Gauge className="w-3.5 h-3.5 text-blue-700" />
-                <span>Rows 19 &amp; 20 — Fast Voltage &amp; Ampere Bar (Auto-activates [SR 8] Measurement = Yes):</span>
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleApplyVoltagePreset('234', '235', '232')}
-                  className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold cursor-pointer shadow-2xs"
-                >
-                  ⚡ Auto-Fill Normal Voltage (234 / 235 / 232)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyVoltagePreset('234', '235', '232', '99', '72', '85', '42')}
-                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer shadow-2xs"
-                >
-                  Standard 234V + Sample Load (99/72/85/42)
-                </button>
-              </div>
-            </div>
-          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-800">
-            {/* Row 19: Voltage (R-N, Y-N, B-N) */}
-            <div className="lg:col-span-5 p-2 bg-white flex items-center gap-2">
-              <div className="px-2 py-1 bg-amber-100 border border-amber-300 rounded font-extrabold text-amber-950 text-[11px] shrink-0">
-                19. Voltage
-              </div>
-              <div className="grid grid-cols-3 gap-1.5 flex-1">
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-500 uppercase text-center">R-N</span>
-                  <input
-                    ref={voltageRNRef}
-                    type="text"
-                    inputMode="numeric"
-                    disabled={isReadOnly}
-                    value={measurements.voltageRN}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleMeasurementChange('voltageRN', e.target.value, voltageYNRef)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        voltageYNRef.current?.focus();
-                        voltageYNRef.current?.select();
-                      }
-                    }}
-                    placeholder="234"
-                    className="w-full text-center py-1 border-2 border-slate-300 rounded font-mono font-extrabold text-slate-900 focus:border-blue-600 outline-none"
-                  />
-                </div>
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-500 uppercase text-center">Y-N</span>
-                  <input
-                    ref={voltageYNRef}
-                    type="text"
-                    inputMode="numeric"
-                    disabled={isReadOnly}
-                    value={measurements.voltageYN}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleMeasurementChange('voltageYN', e.target.value, voltageBNRef)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        voltageBNRef.current?.focus();
-                        voltageBNRef.current?.select();
-                      }
-                    }}
-                    placeholder="235"
-                    className="w-full text-center py-1 border-2 border-slate-300 rounded font-mono font-extrabold text-slate-900 focus:border-blue-600 outline-none"
-                  />
-                </div>
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-500 uppercase text-center">B-N</span>
-                  <input
-                    ref={voltageBNRef}
-                    type="text"
-                    inputMode="numeric"
-                    disabled={isReadOnly}
-                    value={measurements.voltageBN}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleMeasurementChange('voltageBN', e.target.value, ampereRRef)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        ampereRRef.current?.focus();
-                        ampereRRef.current?.select();
-                      }
-                    }}
-                    placeholder="232"
-                    className="w-full text-center py-1 border-2 border-slate-300 rounded font-mono font-extrabold text-slate-900 focus:border-blue-600 outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Row 20: Ampere (R, Y, B, N) */}
-            <div className="lg:col-span-7 p-2 bg-white flex items-center gap-2">
-              <div className="px-2 py-1 bg-cyan-100 border border-cyan-300 rounded font-extrabold text-cyan-950 text-[11px] shrink-0">
-                20. Ampere
-              </div>
-              <div className="grid grid-cols-4 gap-1.5 flex-1">
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-500 uppercase text-center">R</span>
-                  <input
-                    ref={ampereRRef}
-                    type="text"
-                    inputMode="decimal"
-                    disabled={isReadOnly}
-                    value={measurements.ampereR}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleMeasurementChange('ampereR', e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        ampereYRef.current?.focus();
-                        ampereYRef.current?.select();
-                      }
-                    }}
-                    placeholder="99"
-                    className="w-full text-center py-1 border-2 border-slate-300 rounded font-mono font-extrabold text-slate-900 focus:border-blue-600 outline-none"
-                  />
-                </div>
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-500 uppercase text-center">Y</span>
-                  <input
-                    ref={ampereYRef}
-                    type="text"
-                    inputMode="decimal"
-                    disabled={isReadOnly}
-                    value={measurements.ampereY}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleMeasurementChange('ampereY', e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        ampereBRef.current?.focus();
-                        ampereBRef.current?.select();
-                      }
-                    }}
-                    placeholder="72"
-                    className="w-full text-center py-1 border-2 border-slate-300 rounded font-mono font-extrabold text-slate-900 focus:border-blue-600 outline-none"
-                  />
-                </div>
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-500 uppercase text-center">B</span>
-                  <input
-                    ref={ampereBRef}
-                    type="text"
-                    inputMode="decimal"
-                    disabled={isReadOnly}
-                    value={measurements.ampereB}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleMeasurementChange('ampereB', e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        ampereNRef.current?.focus();
-                        ampereNRef.current?.select();
-                      }
-                    }}
-                    placeholder="85"
-                    className="w-full text-center py-1 border-2 border-slate-300 rounded font-mono font-extrabold text-slate-900 focus:border-blue-600 outline-none"
-                  />
-                </div>
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-500 uppercase text-center">N</span>
-                  <input
-                    ref={ampereNRef}
-                    type="text"
-                    inputMode="decimal"
-                    disabled={isReadOnly}
-                    value={measurements.ampereN}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleMeasurementChange('ampereN', e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        saveStickyDefaultDate(performa.date);
-                        onSaveAndAddAnother();
-                      }
-                    }}
-                    placeholder="42"
-                    className="w-full text-center py-1 border-2 border-slate-300 rounded font-mono font-extrabold text-slate-900 focus:border-blue-600 outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Official Print Footer */}
         <div className="grid grid-cols-2 gap-6 pt-4 mt-2 border-t border-slate-400 text-xs text-slate-600">
