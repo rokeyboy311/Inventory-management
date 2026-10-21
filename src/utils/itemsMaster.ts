@@ -62,48 +62,68 @@ export function buildDefaultMasterItems(): ItemMasterTemplate[] {
   });
 }
 
+export function getLocationItemsStorageKey(locationId?: string): string {
+  if (!locationId || locationId === 'global') return MASTER_ITEMS_STORAGE_KEY;
+  return `dgvcl_custom_master_items_loc_${locationId}`;
+}
+
 /**
- * Loads current master items from localStorage, or initializes with defaults
+ * Loads current master items for a specific location from localStorage, or initializes with defaults
  */
-export function getMasterItemsList(): ItemMasterTemplate[] {
+export function getMasterItemsList(locationId?: string): ItemMasterTemplate[] {
   if (typeof window === 'undefined') {
     return buildDefaultMasterItems();
   }
+  const key = getLocationItemsStorageKey(locationId);
   try {
-    const raw = localStorage.getItem(MASTER_ITEMS_STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
     }
+
+    // Fallback: if location doesn't have custom items yet, check global custom items
+    if (locationId && locationId !== 'global') {
+      const globalRaw = localStorage.getItem(MASTER_ITEMS_STORAGE_KEY);
+      if (globalRaw) {
+        const parsedGlobal = JSON.parse(globalRaw);
+        if (Array.isArray(parsedGlobal) && parsedGlobal.length > 0) {
+          return parsedGlobal;
+        }
+      }
+    }
   } catch (err) {
-    console.warn('Error reading master items template from storage:', err);
+    console.warn(`Error reading master items template for location ${locationId}:`, err);
   }
 
   const defaults = buildDefaultMasterItems();
-  saveMasterItemsList(defaults);
+  if (!locationId || locationId === 'global') {
+    saveMasterItemsList(defaults, 'global');
+  }
   return defaults;
 }
 
 /**
- * Saves master items list to storage and notifies listeners
+ * Saves master items list for a specific location to storage and notifies listeners
  */
-export function saveMasterItemsList(items: ItemMasterTemplate[]): void {
+export function saveMasterItemsList(items: ItemMasterTemplate[], locationId?: string): void {
   if (typeof window === 'undefined') return;
+  const key = getLocationItemsStorageKey(locationId);
   try {
-    localStorage.setItem(MASTER_ITEMS_STORAGE_KEY, JSON.stringify(items));
-    window.dispatchEvent(new CustomEvent('dgvcl_master_items_changed', { detail: items }));
+    localStorage.setItem(key, JSON.stringify(items));
+    window.dispatchEvent(new CustomEvent('dgvcl_master_items_changed', { detail: { items, locationId } }));
   } catch (err) {
-    console.error('Failed to save master items to storage:', err);
+    console.error(`Failed to save master items to storage for location ${locationId}:`, err);
   }
 }
 
 /**
- * Adds a new item to the master items list
+ * Adds a new item to the master items list for a specific location
  */
-export function addMasterItem(newItem: Omit<ItemMasterTemplate, 'id'>): ItemMasterTemplate[] {
-  const current = getMasterItemsList();
+export function addMasterItem(newItem: Omit<ItemMasterTemplate, 'id'>, locationId?: string): ItemMasterTemplate[] {
+  const current = getMasterItemsList(locationId);
   const id = `master-item-custom-${Date.now()}`;
   const item: ItemMasterTemplate = {
     ...newItem,
@@ -111,37 +131,46 @@ export function addMasterItem(newItem: Omit<ItemMasterTemplate, 'id'>): ItemMast
     srLabel: newItem.srLabel || String(current.length + 1)
   };
   const updated = [...current, item];
-  saveMasterItemsList(updated);
+  saveMasterItemsList(updated, locationId);
   return updated;
 }
 
 /**
- * Updates an existing item in the master list
+ * Updates an existing item in the master list for a specific location
  */
-export function updateMasterItem(id: string, changes: Partial<ItemMasterTemplate>): ItemMasterTemplate[] {
-  const current = getMasterItemsList();
+export function updateMasterItem(id: string, changes: Partial<ItemMasterTemplate>, locationId?: string): ItemMasterTemplate[] {
+  const current = getMasterItemsList(locationId);
   const updated = current.map(it => (it.id === id ? { ...it, ...changes } : it));
-  saveMasterItemsList(updated);
+  saveMasterItemsList(updated, locationId);
   return updated;
 }
 
 /**
- * Removes an item from the master items list
+ * Removes an item from the master items list for a specific location
  */
-export function deleteMasterItem(id: string): ItemMasterTemplate[] {
-  const current = getMasterItemsList();
+export function deleteMasterItem(id: string, locationId?: string): ItemMasterTemplate[] {
+  const current = getMasterItemsList(locationId);
   const updated = current.filter(it => it.id !== id);
-  saveMasterItemsList(updated);
+  saveMasterItemsList(updated, locationId);
   return updated;
 }
 
 /**
- * Resets master items to the standard DISCOM 23-item template
+ * Resets master items to the standard DISCOM 23-item template for a specific location
  */
-export function resetMasterItemsToDefault(): ItemMasterTemplate[] {
+export function resetMasterItemsToDefault(locationId?: string): ItemMasterTemplate[] {
   const defaults = buildDefaultMasterItems();
-  saveMasterItemsList(defaults);
+  saveMasterItemsList(defaults, locationId);
   return defaults;
+}
+
+/**
+ * Copies master items from one location to another
+ */
+export function copyMasterItemsFromLocation(fromLocationId: string, toLocationId: string): ItemMasterTemplate[] {
+  const sourceItems = getMasterItemsList(fromLocationId);
+  saveMasterItemsList(sourceItems, toLocationId);
+  return sourceItems;
 }
 
 /**

@@ -89,6 +89,7 @@ export interface LocationWorkbook {
   workbookName: string;
   activeSheetName: string;
   sheets: Record<string, SheetDefinition>;
+  customItems?: any[];
   lastModified: string;
 }
 
@@ -438,11 +439,20 @@ export function computeSummaryQtyFromSizes(
  * Ensures any Performa's items array (whether newly created or loaded from an older 33-row database record)
  * is normalized to the 23-item master structure with all `sizeFields` and `sizeQtys` intact.
  */
-export function ensureCompleteMasterItems(existingItems: MaintenanceItemRow[] = []): MaintenanceItemRow[] {
+export function ensureCompleteMasterItems(
+  existingItems: MaintenanceItemRow[] = [],
+  locationId?: string
+): MaintenanceItemRow[] {
   let masterTemplates: Omit<MaintenanceItemRow, 'id'>[] = DEFAULT_PERFORMA_ITEMS_TEMPLATE;
   if (typeof window !== 'undefined') {
     try {
-      const raw = localStorage.getItem('dgvcl_custom_master_items_v3');
+      let raw: string | null = null;
+      if (locationId && locationId !== 'global') {
+        raw = localStorage.getItem(`dgvcl_custom_master_items_loc_${locationId}`);
+      }
+      if (!raw) {
+        raw = localStorage.getItem('dgvcl_custom_master_items_v3');
+      }
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -643,7 +653,7 @@ export function saveStickyDefaultDate(dateStr: string): void {
   }
 }
 
-export function createBlankPerforma(id: string, location: string = '', stickyDate?: string): PerformaRecord {
+export function createBlankPerforma(id: string, location: string = '', stickyDate?: string, locationId?: string): PerformaRecord {
   const defaultDate = stickyDate || getStickyDefaultDate();
   return {
     id,
@@ -658,7 +668,7 @@ export function createBlankPerforma(id: string, location: string = '', stickyDat
     performaNo: id,
     workOrderNo: 'WO/DGVCL/ANK/2026',
     serviceOrderNo: 'SO/DGVCL/GIDC/2026',
-    items: ensureCompleteMasterItems([]),
+    items: ensureCompleteMasterItems([], locationId),
     measurements: {
       voltageRN: '',
       voltageYN: '',

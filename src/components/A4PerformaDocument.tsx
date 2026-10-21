@@ -33,6 +33,7 @@ interface A4PerformaDocumentProps {
   viewMode: 'edit' | 'preview' | 'print';
   duplicateError: string | null;
   onClearDuplicateError: () => void;
+  locationId?: string;
 }
 
 const QUICK_MAKES = ['Aman', 'Voltamp', 'ABB', 'Crompton', 'Bharat Bijlee', 'Kotsons', 'Other'];
@@ -49,14 +50,15 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   excelRowPosition = 1,
   viewMode,
   duplicateError,
-  onClearDuplicateError
+  onClearDuplicateError,
+  locationId
 }) => {
   const isReadOnly = viewMode === 'preview' || viewMode === 'print';
 
-  // Ensure all 23 master rows (with size sub-fields) are present in exact order
+  // Ensure all master rows (with size sub-fields) are present in exact order for this location
   const items = useMemo(
-    () => ensureCompleteMasterItems(performa.items || []),
-    [performa.items]
+    () => ensureCompleteMasterItems(performa.items || [], locationId),
+    [performa.items, locationId]
   );
 
   // Row filter mode: 'all' | 'common' | 'active_only'

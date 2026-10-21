@@ -39,6 +39,7 @@ export function UserDashboard({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isItemsSettingsModalOpen, setIsItemsSettingsModalOpen] = useState(false);
+  const [selectedLocationForItems, setSelectedLocationForItems] = useState<string | undefined>(undefined);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const q = searchQuery.toLowerCase().trim();
@@ -112,9 +113,12 @@ export function UserDashboard({
           {/* Items Settings (Master Template) Button */}
           <button
             type="button"
-            onClick={() => setIsItemsSettingsModalOpen(true)}
+            onClick={() => {
+              setSelectedLocationForItems(undefined);
+              setIsItemsSettingsModalOpen(true);
+            }}
             className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-            title="Configure Default Performa Items (Add, Edit, Remove)"
+            title="Configure Location-wise Performa Items (Add, Edit, Remove, Rates)"
           >
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />
             <span className="hidden sm:inline">Items Settings</span>
@@ -153,7 +157,12 @@ export function UserDashboard({
       {/* Items Settings Modal */}
       <ItemsSettingsModal
         isOpen={isItemsSettingsModalOpen}
-        onClose={() => setIsItemsSettingsModalOpen(false)}
+        onClose={() => {
+          setIsItemsSettingsModalOpen(false);
+          setSelectedLocationForItems(undefined);
+        }}
+        workbooks={workbooks}
+        activeLocationId={selectedLocationForItems}
         onItemsUpdated={onRefreshData}
       />
 
@@ -270,20 +279,36 @@ export function UserDashboard({
                         </div>
                       </div>
 
-                      {/* Delete Workbook Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(`Are you sure you want to delete ${wb.locationName} Excel file and all its performa records?`)) {
-                            onDeleteWorkbook(wb.locationId);
-                          }
-                        }}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title={`Delete ${wb.locationName} Excel`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {/* Location-specific Items Settings Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedLocationForItems(wb.locationId);
+                            setIsItemsSettingsModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors cursor-pointer"
+                          title={`Configure ${wb.locationName} Items & Rates`}
+                        >
+                          <Sliders className="w-4 h-4" />
+                        </button>
+
+                        {/* Delete Workbook Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`Are you sure you want to delete ${wb.locationName} Excel file and all its performa records?`)) {
+                              onDeleteWorkbook(wb.locationId);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          title={`Delete ${wb.locationName} Excel`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Dual Sheets Details */}

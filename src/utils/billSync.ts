@@ -4,8 +4,8 @@ import { getMasterItemsList } from './itemsMaster';
 /**
  * Standard default contractor rates by description keywords
  */
-function getDefaultRatesForDescription(description: string, srLabel?: string): { rate: number; labourRate: number } {
-  const master = getMasterItemsList();
+function getDefaultRatesForDescription(description: string, srLabel?: string, locationId?: string): { rate: number; labourRate: number } {
+  const master = getMasterItemsList(locationId);
   if (srLabel) {
     const match = master.find(m => m.srLabel === srLabel);
     if (match && match.defaultRate !== undefined) {
@@ -37,12 +37,13 @@ function getDefaultRatesForDescription(description: string, srLabel?: string): {
 
 /**
  * Extracts and sums all materials consumed across all performas in a location's inventory sheet,
- * and generates the complete Sheet 2 (bill) data.
+ * and generates the complete Sheet 2 (bill) data using location-specific rates.
  */
 export function syncBillFromInventory(
   performas: PerformaRecord[],
   locationName: string,
-  existingBill?: BillSheetDefinition
+  existingBill?: BillSheetDefinition,
+  locationId?: string
 ): BillSheetDefinition {
   const cleanLoc = (locationName || 'LOCATION').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
   const year = new Date().getFullYear();
@@ -133,7 +134,7 @@ export function syncBillFromInventory(
 
   materialMap.forEach((agg) => {
     const existingRate = existingRatesMap.get(agg.description.toLowerCase().trim());
-    const defaultRates = getDefaultRatesForDescription(agg.description, agg.srLabel);
+    const defaultRates = getDefaultRatesForDescription(agg.description, agg.srLabel, locationId);
 
     const rate = existingRate ? existingRate.rate : defaultRates.rate;
     const labourRate = existingRate ? existingRate.labourRate : defaultRates.labourRate;

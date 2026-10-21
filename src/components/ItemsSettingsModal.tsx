@@ -10,7 +10,9 @@ import {
   Sliders, 
   AlertCircle,
   Tag,
-  DollarSign
+  DollarSign,
+  MapPin,
+  Copy
 } from 'lucide-react';
 import { 
   ItemMasterTemplate, 
@@ -18,16 +20,27 @@ import {
   addMasterItem, 
   updateMasterItem, 
   deleteMasterItem, 
-  resetMasterItemsToDefault 
+  resetMasterItemsToDefault,
+  copyMasterItemsFromLocation
 } from '../utils/itemsMaster';
+import { LocationWorkbook } from '../types/performa';
 
 interface ItemsSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onItemsUpdated?: () => void;
+  workbooks?: LocationWorkbook[];
+  activeLocationId?: string;
+  onItemsUpdated?: (locationId?: string) => void;
 }
 
-export function ItemsSettingsModal({ isOpen, onClose, onItemsUpdated }: ItemsSettingsModalProps) {
+export function ItemsSettingsModal({
+  isOpen,
+  onClose,
+  workbooks = [],
+  activeLocationId,
+  onItemsUpdated
+}: ItemsSettingsModalProps) {
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(activeLocationId || 'global');
   const [items, setItems] = useState<ItemMasterTemplate[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -51,18 +64,20 @@ export function ItemsSettingsModal({ isOpen, onClose, onItemsUpdated }: ItemsSet
 
   const [notification, setNotification] = useState<string | null>(null);
 
-  const loadData = () => {
-    const list = getMasterItemsList();
+  const loadData = (locId: string = selectedLocationId) => {
+    const list = getMasterItemsList(locId);
     setItems(list);
   };
 
   useEffect(() => {
     if (isOpen) {
-      loadData();
+      const initialLoc = activeLocationId || (workbooks && workbooks.length > 0 ? workbooks[0].locationId : 'global');
+      setSelectedLocationId(initialLoc);
+      loadData(initialLoc);
       setIsAddingNew(false);
       setEditingItemId(null);
     }
-  }, [isOpen]);
+  }, [isOpen, activeLocationId]);
 
   const showToast = (msg: string) => {
     setNotification(msg);
@@ -70,6 +85,17 @@ export function ItemsSettingsModal({ isOpen, onClose, onItemsUpdated }: ItemsSet
   };
 
   if (!isOpen) return null;
+
+  const currentLocationName = selectedLocationId === 'global'
+    ? 'Standard Master (Default for All Locations)'
+    : (workbooks.find(w => w.locationId === selectedLocationId)?.locationName || 'Selected Location');
+
+  const handleLocationChange = (newLocId: string) => {
+    setSelectedLocationId(newLocId);
+    loadData(newLocId);
+    setEditingItemId(null);
+    setIsAddingNew(false);
+  };
 
   const filteredItems = items.filter(it => 
     (it.description || '').toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
@@ -103,20 +129,20 @@ export function ItemsSettingsModal({ isOpen, onClose, onItemsUpdated }: ItemsSet
       sizeFields: sizes && sizes.length > 0 ? sizes : undefined,
       defaultRate: editRate,
       defaultLabourRate: editLabourRate
-    });
+    }, selectedLocationId);
 
     setItems(updated);
     setEditingItemId(null);
-    showToast('Item updated successfully');
-    onItemsUpdated?.();
+    showToast(`Item updated for ${currentLocationName}`);
+    onItemsUpdated?.(selectedLocationId);
   };
 
   const handleDelete = (it: ItemMasterTemplate) => {
-    if (window.confirm(`Are you sure you want to remove item "${it.srLabel}: ${it.description}" from default performas?`)) {
-      const updated = deleteMasterItem(it.id);
+    if (window.confirm(`Are you sure you want to remove item "${it.srLabel}: ${it.description}" from ${currentLocationName}?`)) {
+      const updated = deleteMasterItem(it.id, selectedLocationId);
       setItems(updated);
-      showToast('Item removed');
-      onItemsUpdated?.();
+      showToast(`Item removed from ${currentLocationName}`);
+      onItemsUpdated?.(selectedLocationId);
     }
   };
 
@@ -139,23 +165,33 @@ export function ItemsSettingsModal({ isOpen, onClose, onItemsUpdated }: ItemsSet
       sizeFields: sizes && sizes.length > 0 ? sizes : undefined,
       defaultRate: Number(newRate) || 0,
       defaultLabourRate: Number(newLabourRate) || 0
-    });
+    }, selectedLocationId);
 
     setItems(updated);
     setIsAddingNew(false);
     setNewSrLabel('');
     setNewDescription('');
     setNewSizeFields('');
-    showToast('New item added to default performa template!');
-    onItemsUpdated?.();
+    showToast(`New item added to ${currentLocationName}!`);
+    onItemsUpdated?.(selectedLocationId);
   };
 
   const handleResetDefaults = () => {
-    if (window.confirm('Reset all items back to standard DISCOM 23-item template? Any custom items will be replaced.')) {
-      const defaults = resetMasterItemsToDefault();
+    if (window.confirm(`Reset all items for "${currentLocationName}" back to standard DISCOM 23-item template?`)) {
+      const defaults = resetMasterItemsToDefault(selectedLocationId);
       setItems(defaults);
-      showToast('Items reset to default template');
-      onItemsUpdated?.();
+      showToast(`Items for ${currentLocationName} reset to default template`);
+      onItemsUpdated?.(selectedLocationId);
+    }
+  };
+
+  const handleCopyFromLocation = (sourceLocId: string) => {
+    const sourceName = sourceLocId === 'global' ? 'Standard Master' : (workbooks.find(w => w.locationId === sourceLocId)?.locationName || 'Source Location');
+    if (window.confirm(`Copy all items and rates from "${sourceName}" into "${currentLocationName}"?`)) {
+      const copied = copyMasterItemsFromLocation(sourceLocId, selectedLocationId);
+      setItems(copied);
+      showToast(`Copied ${copied.length} items from ${sourceName} into ${currentLocationName}!`);
+      onItemsUpdated?.(selectedLocationId);
     }
   };
 
@@ -171,10 +207,10 @@ export function ItemsSettingsModal({ isOpen, onClose, onItemsUpdated }: ItemsSet
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                Performa Items Settings (Default Items Master)
+                Location-wise Performa Items Settings
               </h2>
               <p className="text-xs text-slate-400">
-                Configure default items that automatically appear in each location's inventory performa
+                Configure unique maintenance items &amp; rates separately for each location
               </p>
             </div>
           </div>
@@ -184,7 +220,7 @@ export function ItemsSettingsModal({ isOpen, onClose, onItemsUpdated }: ItemsSet
               type="button"
               onClick={handleResetDefaults}
               className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700/80 flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Reset to DISCOM standard 23 items"
+              title="Reset this location to DISCOM standard 23 items"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Reset Defaults</span>
@@ -198,6 +234,65 @@ export function ItemsSettingsModal({ isOpen, onClose, onItemsUpdated }: ItemsSet
               <X className="w-5 h-5" />
             </button>
           </div>
+        </div>
+
+        {/* Location Selection Bar */}
+        <div className="px-6 py-3 bg-slate-950/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-emerald-400" />
+              Configure Location:
+            </span>
+            <select
+              value={selectedLocationId}
+              onChange={(e) => handleLocationChange(e.target.value)}
+              className="bg-slate-900 border border-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl focus:outline-none focus:border-emerald-500 cursor-pointer shadow-sm"
+            >
+              {workbooks && workbooks.length > 0 && (
+                <optgroup label="Locations">
+                  {workbooks.map(w => (
+                    <option key={w.locationId} value={w.locationId}>
+                      📍 {w.locationName} ({w.workbookName})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Default Template">
+                <option value="global">🌐 Standard Master (Default for All Locations)</option>
+              </optgroup>
+            </select>
+
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              {currentLocationName} ({items.length} items)
+            </span>
+          </div>
+
+          {/* Copy from another location */}
+          {workbooks && workbooks.length > 1 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-400 hidden sm:inline">Copy Settings:</span>
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleCopyFromLocation(e.target.value);
+                    e.target.value = '';
+                  }
+                }}
+                defaultValue=""
+                className="bg-slate-900 border border-slate-700 text-slate-300 text-xs px-2.5 py-1.5 rounded-xl focus:outline-none focus:border-cyan-500 cursor-pointer"
+              >
+                <option value="" disabled>📋 Copy Items From...</option>
+                {workbooks.filter(w => w.locationId !== selectedLocationId).map(w => (
+                  <option key={w.locationId} value={w.locationId}>
+                    Copy from {w.locationName}
+                  </option>
+                ))}
+                {selectedLocationId !== 'global' && (
+                  <option value="global">Copy from Standard Master</option>
+                )}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Toast Banner */}

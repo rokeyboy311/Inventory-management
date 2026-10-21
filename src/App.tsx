@@ -289,7 +289,7 @@ export function App() {
     if (autoEnter) {
       // Step 2: enter location excel file directly
       const nextId = getNextPerformaId([], newWb.locationName);
-      const blank = createBlankPerforma(nextId, newWb.locationName);
+      const blank = createBlankPerforma(nextId, newWb.locationName, undefined, newWb.locationId);
       setCurrentPerforma(blank);
       setOriginalEditingId(null);
       initHistory(blank);
@@ -358,9 +358,9 @@ export function App() {
 
     const sortedPerformas = sortPerformasBySequence(nextPerformas);
 
-    // Auto-sync Sheet 2 (bill) with all materials in Sheet 1 (inventory)
+    // Auto-sync Sheet 2 (bill) with all materials in Sheet 1 (inventory) using location rates
     const existingBillData = activeWorkbook.sheets['bill']?.billData;
-    const syncedBill = syncBillFromInventory(sortedPerformas, activeWorkbook.locationName, existingBillData);
+    const syncedBill = syncBillFromInventory(sortedPerformas, activeWorkbook.locationName, existingBillData, activeWorkbook.locationId);
 
     // Update workbook
     const updatedSheets = {
@@ -440,8 +440,8 @@ export function App() {
     ]);
 
     const nextId = getNextPerformaId(updatedPerformas, currentLocName);
-    // Retain Sticky Date, prefill current location
-    const freshPerforma = createBlankPerforma(nextId, currentLocName, updatedRec.date);
+    // Retain Sticky Date, prefill current location and location items
+    const freshPerforma = createBlankPerforma(nextId, currentLocName, updatedRec.date, activeWorkbook?.locationId);
 
     setCurrentPerforma(freshPerforma);
     setOriginalEditingId(null);
@@ -455,7 +455,7 @@ export function App() {
   const handleStartNewPerforma = () => {
     if (!activeWorkbook) return;
     const nextId = getNextPerformaId(activePerformas, activeWorkbook.locationName);
-    const fresh = createBlankPerforma(nextId, activeWorkbook.locationName, currentPerforma.date);
+    const fresh = createBlankPerforma(nextId, activeWorkbook.locationName, currentPerforma.date, activeWorkbook.locationId);
     setCurrentPerforma(fresh);
     setOriginalEditingId(null);
     setDuplicateError(null);
@@ -489,7 +489,7 @@ export function App() {
 
     const filtered = activePerformas.filter(p => p.id.trim().toLowerCase() !== targetId.toLowerCase());
     const existingBillData = activeWorkbook.sheets['bill']?.billData;
-    const syncedBill = syncBillFromInventory(filtered, activeWorkbook.locationName, existingBillData);
+    const syncedBill = syncBillFromInventory(filtered, activeWorkbook.locationName, existingBillData, activeWorkbook.locationId);
 
     const updatedWorkbook: LocationWorkbook = {
       ...activeWorkbook,
@@ -529,7 +529,7 @@ export function App() {
       initHistory(nextToSelect);
     } else if (filtered.length === 0) {
       const nextId = getNextPerformaId([], activeWorkbook.locationName);
-      const fresh = createBlankPerforma(nextId, activeWorkbook.locationName);
+      const fresh = createBlankPerforma(nextId, activeWorkbook.locationName, undefined, activeWorkbook.locationId);
       setCurrentPerforma(fresh);
       setOriginalEditingId(null);
       initHistory(fresh);
@@ -615,12 +615,16 @@ export function App() {
             const sheet = wb.sheets ? wb.sheets[targetSheet] : undefined;
             const performas = sheet?.performas || [];
             if (performas.length > 0) {
-              setCurrentPerforma(performas[0]);
+              const loadedRecord = {
+                ...performas[0],
+                items: ensureCompleteMasterItems(performas[0].items || [], wb.locationId)
+              };
+              setCurrentPerforma(loadedRecord);
               setOriginalEditingId(performas[0].id);
-              initHistory(performas[0]);
+              initHistory(loadedRecord);
             } else {
               const nextId = getNextPerformaId([], wb.locationName);
-              const blank = createBlankPerforma(nextId, wb.locationName);
+              const blank = createBlankPerforma(nextId, wb.locationName, undefined, wb.locationId);
               setCurrentPerforma(blank);
               setOriginalEditingId(null);
               initHistory(blank);
@@ -900,6 +904,7 @@ export function App() {
               <A4PerformaDocument
                 performa={currentPerforma}
                 allPerformas={activePerformas}
+                locationId={activeWorkbook?.locationId}
                 onChange={handlePerformaChange}
                 onSaveAndAddAnother={handleSaveAndAddAnother}
                 onSaveAndClose={handleSaveAndClose}
@@ -952,12 +957,15 @@ export function App() {
       <ItemsSettingsModal
         isOpen={isItemsSettingsModalOpen}
         onClose={() => setIsItemsSettingsModalOpen(false)}
-        onItemsUpdated={() => {
-          reloadData();
+        workbooks={workbooks}
+        activeLocationId={activeWorkbook?.locationId}
+        onItemsUpdated={async (updatedLocId) => {
+          await reloadData();
           // Update current performa items if actively open in form
+          const targetLocId = updatedLocId || activeWorkbook?.locationId;
           setCurrentPerforma(prev => ({
             ...prev,
-            items: ensureCompleteMasterItems(prev.items)
+            items: ensureCompleteMasterItems(prev.items || [], targetLocId)
           }));
         }}
       />
