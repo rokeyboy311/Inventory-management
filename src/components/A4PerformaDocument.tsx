@@ -408,6 +408,24 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
     }
   };
 
+  const focusRowLastInput = (rowIndex: number) => {
+    const row = items[rowIndex];
+    if (row?.sizeFields && row.sizeFields.length > 0) {
+      const lastIdx = row.sizeFields.length - 1;
+      const el = sizeInputRefs.current[`${rowIndex}-${lastIdx}`];
+      if (el) {
+        el.focus();
+        el.select();
+        return;
+      }
+    }
+    const nextEl = qtyInputRefs.current[rowIndex];
+    if (nextEl) {
+      nextEl.focus();
+      nextEl.select();
+    }
+  };
+
   const handleQtyKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>,
     rowIndex: number,
@@ -442,6 +460,53 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
         focusRowFirstInput(visibleRowIndices[posInVisible - 1]);
       } else {
         capacityInputRef.current?.focus();
+        capacityInputRef.current?.select();
+      }
+    } else if (e.key === 'ArrowRight') {
+      const target = e.target as HTMLInputElement;
+      const isAtEnd = target.selectionStart === target.value.length;
+      const isAllSelected = target.selectionStart === 0 && target.selectionEnd === target.value.length;
+
+      // Navigate right when cursor reaches end of text, empty, or all selected
+      if (isAllSelected || isAtEnd || !target.value) {
+        if (sizeIdx !== undefined && sizeIdx < totalSizes - 1) {
+          const nextSizeEl = sizeInputRefs.current[`${rowIndex}-${sizeIdx + 1}`];
+          if (nextSizeEl) {
+            e.preventDefault();
+            nextSizeEl.focus();
+            nextSizeEl.select();
+            return;
+          }
+        }
+        if (posInVisible >= 0 && posInVisible < visibleRowIndices.length - 1) {
+          e.preventDefault();
+          focusRowFirstInput(visibleRowIndices[posInVisible + 1]);
+        }
+      }
+    } else if (e.key === 'ArrowLeft') {
+      const target = e.target as HTMLInputElement;
+      const isAtStart = target.selectionStart === 0;
+      const isAllSelected = target.selectionStart === 0 && target.selectionEnd === target.value.length;
+
+      // Navigate left when cursor reaches start of text, empty, or all selected
+      if (isAllSelected || isAtStart || !target.value) {
+        if (sizeIdx !== undefined && sizeIdx > 0) {
+          const prevSizeEl = sizeInputRefs.current[`${rowIndex}-${sizeIdx - 1}`];
+          if (prevSizeEl) {
+            e.preventDefault();
+            prevSizeEl.focus();
+            prevSizeEl.select();
+            return;
+          }
+        }
+        if (posInVisible > 0) {
+          e.preventDefault();
+          focusRowLastInput(visibleRowIndices[posInVisible - 1]);
+        } else {
+          e.preventDefault();
+          capacityInputRef.current?.focus();
+          capacityInputRef.current?.select();
+        }
       }
     } else if (e.key === ' ') {
       e.preventDefault();
@@ -1184,6 +1249,17 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     makeInputRef.current?.focus();
+                  } else if (e.key === 'ArrowRight') {
+                    const t = e.target as HTMLInputElement;
+                    if (t.selectionStart === t.value.length || !t.value || (t.selectionStart === 0 && t.selectionEnd === t.value.length)) {
+                      e.preventDefault();
+                      makeInputRef.current?.focus();
+                      makeInputRef.current?.select();
+                    }
+                  } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const firstRowIdx = visibleRowIndices[0] ?? 0;
+                    focusRowFirstInput(firstRowIdx);
                   }
                 }}
                 placeholder="Enter Location of Transformer..."
@@ -1232,6 +1308,24 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                       }
                       serialInputRef.current?.focus();
                     }
+                  } else if (e.key === 'ArrowRight') {
+                    const t = e.target as HTMLInputElement;
+                    if (t.selectionStart === t.value.length || !t.value || (t.selectionStart === 0 && t.selectionEnd === t.value.length)) {
+                      e.preventDefault();
+                      serialInputRef.current?.focus();
+                      serialInputRef.current?.select();
+                    }
+                  } else if (e.key === 'ArrowLeft') {
+                    const t = e.target as HTMLInputElement;
+                    if (t.selectionStart === 0 || !t.value || (t.selectionStart === 0 && t.selectionEnd === t.value.length)) {
+                      e.preventDefault();
+                      locationInputRef.current?.focus();
+                      locationInputRef.current?.select();
+                    }
+                  } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const firstRowIdx = visibleRowIndices[0] ?? 0;
+                    focusRowFirstInput(firstRowIdx);
                   }
                 }}
                 placeholder="Select or type Make..."
@@ -1287,6 +1381,24 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                     e.preventDefault();
                     capacityInputRef.current?.focus();
                     capacityInputRef.current?.select();
+                  } else if (e.key === 'ArrowRight') {
+                    const t = e.target as HTMLInputElement;
+                    if (t.selectionStart === t.value.length || !t.value || (t.selectionStart === 0 && t.selectionEnd === t.value.length)) {
+                      e.preventDefault();
+                      capacityInputRef.current?.focus();
+                      capacityInputRef.current?.select();
+                    }
+                  } else if (e.key === 'ArrowLeft') {
+                    const t = e.target as HTMLInputElement;
+                    if (t.selectionStart === 0 || !t.value || (t.selectionStart === 0 && t.selectionEnd === t.value.length)) {
+                      e.preventDefault();
+                      makeInputRef.current?.focus();
+                      makeInputRef.current?.select();
+                    }
+                  } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const firstRowIdx = visibleRowIndices[0] ?? 0;
+                    focusRowFirstInput(firstRowIdx);
                   }
                 }}
                 placeholder="743"
@@ -1310,6 +1422,20 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                     e.preventDefault();
                     const firstRowIdx = visibleRowIndices[0] ?? 0;
                     focusRowFirstInput(firstRowIdx);
+                  } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    const t = e.target as HTMLInputElement;
+                    if (e.key === 'ArrowDown' || t.selectionStart === t.value.length || !t.value || (t.selectionStart === 0 && t.selectionEnd === t.value.length)) {
+                      e.preventDefault();
+                      const firstRowIdx = visibleRowIndices[0] ?? 0;
+                      focusRowFirstInput(firstRowIdx);
+                    }
+                  } else if (e.key === 'ArrowLeft') {
+                    const t = e.target as HTMLInputElement;
+                    if (t.selectionStart === 0 || !t.value || (t.selectionStart === 0 && t.selectionEnd === t.value.length)) {
+                      e.preventDefault();
+                      serialInputRef.current?.focus();
+                      serialInputRef.current?.select();
+                    }
                   }
                 }}
                 placeholder="e.g. 63/22 or 100"
