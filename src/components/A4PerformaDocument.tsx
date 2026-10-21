@@ -1118,16 +1118,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
 
 
 
-        {/* Official Print Footer */}
-        <div className="grid grid-cols-2 gap-6 pt-4 mt-2 border-t border-slate-400 text-xs text-slate-600">
-          <div>
-            <span className="font-bold text-slate-800">Agency / Contractor Signature:</span>{' '}
-            <span className="font-serif italic font-bold text-blue-900">SHIV ELECTRICALS</span>
-          </div>
-          <div className="text-right">
-            <span className="font-bold text-slate-800">Authorized Engineer Signature (DGVCL)</span>
-          </div>
-        </div>
       </div>
 
       {/* ============================================================================
