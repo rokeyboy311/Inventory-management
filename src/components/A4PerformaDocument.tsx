@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   PerformaRecord,
   MaintenanceItemRow,
-  CustomMacroPreset,
   saveStickyDefaultDate,
   ensureCompleteMasterItems,
   isNonZeroQtyValue,
@@ -13,21 +12,13 @@ import {
   Save,
   PlusCircle,
   Trash2,
-  Copy,
-  RotateCcw,
-  Camera,
   Keyboard,
   Smartphone,
-  CheckCircle2,
-  Sparkles,
   MapPin,
   Search,
   Eye,
   EyeOff,
-  BookmarkPlus,
-  X,
-  Loader2,
-  Check
+  X
 } from 'lucide-react';
 
 interface A4PerformaDocumentProps {
@@ -48,8 +39,6 @@ interface A4PerformaDocumentProps {
 const QUICK_MAKES = ['Aman', 'Voltamp', 'ABB', 'Crompton', 'Bharat Bijlee', 'Kotsons', 'Other'];
 const QUICK_CAPACITIES = ['10', '16', '25', '63', '63/22', '100', '200', '315', '500'];
 const QUICK_QTY_CHIPS = [1, 2, 3, 4, 6, 8];
-
-const CUSTOM_MACROS_STORAGE_KEY = 'dgvcl_custom_macro_presets_v2';
 
 export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   performa,
@@ -84,26 +73,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   const [rowFilterMode, setRowFilterMode] = useState<'all' | 'common' | 'active_only'>('all');
   const [itemSearch, setItemSearch] = useState('');
   const [focusedRowIdx, setFocusedRowIdx] = useState<number | null>(null);
-
-  // Custom saved macros
-  const [customMacros, setCustomMacros] = useState<CustomMacroPreset[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem(CUSTOM_MACROS_STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-      } catch {
-        // ignore
-      }
-    }
-    return [];
-  });
-  const [isSavingMacro, setIsSavingMacro] = useState(false);
-  const [newMacroName, setNewMacroName] = useState('');
-
-  // AI Photo Scanner state
-  const [isScanningPhoto, setIsScanningPhoto] = useState(false);
-  const [scanStatusMessage, setScanStatusMessage] = useState<string | null>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Transformer Make Suggestions & Autofill History
   const [storedMakes, setStoredMakes] = useState<string[]>(() => {
@@ -172,13 +141,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   const capacityInputRef = useRef<HTMLInputElement>(null);
   const qtyInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const sizeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  // Previous performa for "Copy Previous Performa" macro
-  const previousPerforma = useMemo(() => {
-    const others = allPerformas.filter(p => p.id !== performa.id);
-    if (others.length === 0) return null;
-    return others[others.length - 1];
-  }, [allPerformas, performa.id]);
 
   // Global keyboard shortcuts: Ctrl+Enter or Alt+S -> Save & Next Performa
   useEffect(() => {
@@ -514,403 +476,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
     }
   };
 
-  // ============================================================================
-  // FEATURE 4: 1-CLICK "SMART PRESET / MACRO" TEMPLATES BAR
-  // ============================================================================
-  const applyMacroHelper = (
-    updater: (row: MaintenanceItemRow, idx: number) => MaintenanceItemRow
-  ) => {
-    if (isReadOnly) return;
-    const nextItems = items.map((row, idx) => updater({ ...row }, idx));
-    onChange({
-      ...performa,
-      items: nextItems
-    });
-  };
-
-  // Macro 1: Standard Routine Service
-  const handleMacroRoutineService = () => {
-    applyMacroHelper(row => {
-      const sr = row.srLabel || String(row.srNo);
-      if (sr === '3' || sr === '5' || sr === '8' || sr === '14' || sr === '15') {
-        return { ...row, materialYes: true, labourYes: true, qty: 1 };
-      }
-      if (sr === '7') {
-        return { ...row, materialYes: true, labourYes: true, qty: '' };
-      }
-      return row;
-    });
-  };
-
-  // Macro 2: LT Bushing + Stud + Nut/Washer Pack
-  const handleMacroBushingStudNutPack = () => {
-    applyMacroHelper(row => {
-      const sr = row.srLabel || String(row.srNo);
-      if (sr === '1' || sr === '2') {
-        return { ...row, materialYes: true, labourYes: true, qty: 4 };
-      }
-      if (sr === '16' || sr === '17') {
-        const nextSizeQtys = { ...(row.sizeQtys || {}), '12MM': 8, '20MM': 8 };
-        return {
-          ...row,
-          materialYes: true,
-          labourYes: true,
-          sizeQtys: nextSizeQtys,
-          qty: computeSummaryQtyFromSizes(row.sizeFields, nextSizeQtys, 16)
-        };
-      }
-      return row;
-    });
-  };
-
-  // Macro 3: Box + Fuse + Cable Pack
-  const handleMacroBoxFuseCablePack = () => {
-    applyMacroHelper(row => {
-      const sr = row.srLabel || String(row.srNo);
-      if (sr === '9') {
-        return { ...row, materialYes: true, labourYes: true, qty: 1 };
-      }
-      if (sr === '6') {
-        const nextSizeQtys = { ...(row.sizeQtys || {}), '70': 3 };
-        return {
-          ...row,
-          materialYes: true,
-          labourYes: true,
-          sizeQtys: nextSizeQtys,
-          qty: 3
-        };
-      }
-      if (sr === '10') {
-        const nextSizeQtys = { ...(row.sizeQtys || {}), '100Amp': 3 };
-        return {
-          ...row,
-          materialYes: true,
-          labourYes: true,
-          sizeQtys: nextSizeQtys,
-          qty: 3
-        };
-      }
-      if (sr === '13') {
-        return { ...row, materialYes: true, labourYes: true, qty: 3 };
-      }
-      return row;
-    });
-  };
-
-  // Macro 4: Copy Previous Performa (clones date, make, capacity, and all rows; clears Location & Serial)
-  const handleCopyPreviousPerforma = () => {
-    if (isReadOnly || !previousPerforma) return;
-    const clonedItems = ensureCompleteMasterItems(previousPerforma.items || []).map(it => ({
-      ...it,
-      ...(it.sizeQtys ? { sizeQtys: { ...it.sizeQtys } } : {})
-    }));
-    onChange({
-      ...performa,
-      date: previousPerforma.date || performa.date,
-      transformerMake: previousPerforma.transformerMake || performa.transformerMake,
-      capacity: previousPerforma.capacity || performa.capacity,
-      location: '',
-      transformerSerialNo: '',
-      items: clonedItems,
-      measurements: { ...previousPerforma.measurements }
-    });
-    setTimeout(() => {
-      locationInputRef.current?.focus();
-    }, 50);
-  };
-
-  // Macro 5: Clear All Rows
-  const handleClearAllRows = () => {
-    if (isReadOnly) return;
-    const clearedItems = items.map(it => ({
-      ...it,
-      materialYes: false,
-      labourYes: false,
-      qty: '',
-      ...(it.sizeFields
-        ? { sizeQtys: Object.fromEntries(it.sizeFields.map(f => [f, ''])) }
-        : {})
-    }));
-    onChange({
-      ...performa,
-      items: clearedItems
-    });
-  };
-
-  // Save current active rows as a custom reusable Macro Preset
-  const handleSaveCurrentAsCustomMacro = () => {
-    if (!newMacroName.trim()) return;
-    const itemsMap: CustomMacroPreset['itemsMap'] = {};
-    items.forEach((it, idx) => {
-      if (it.materialYes || it.labourYes || hasRowAnyQty(it)) {
-        itemsMap[idx] = {
-          materialYes: it.materialYes,
-          labourYes: it.labourYes,
-          qty: it.qty,
-          ...(it.sizeQtys ? { sizeQtys: { ...it.sizeQtys } } : {})
-        };
-      }
-    });
-    const newPreset: CustomMacroPreset = {
-      id: `macro-${Date.now()}`,
-      name: newMacroName.trim(),
-      itemsMap
-    };
-    const updated = [...customMacros, newPreset];
-    setCustomMacros(updated);
-    try {
-      localStorage.setItem(CUSTOM_MACROS_STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
-    setNewMacroName('');
-    setIsSavingMacro(false);
-  };
-
-  const handleApplyCustomMacro = (preset: CustomMacroPreset) => {
-    applyMacroHelper((row, idx) => {
-      const saved = preset.itemsMap[idx];
-      if (saved) {
-        return {
-          ...row,
-          materialYes: saved.materialYes,
-          labourYes: saved.labourYes,
-          qty: saved.qty,
-          ...(saved.sizeQtys ? { sizeQtys: { ...saved.sizeQtys } } : {})
-        };
-      }
-      return row;
-    });
-  };
-
-  const handleDeleteCustomMacro = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const updated = customMacros.filter(m => m.id !== id);
-    setCustomMacros(updated);
-    try {
-      localStorage.setItem(CUSTOM_MACROS_STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
-  };
-
-
-
-  // ============================================================================
-  // FEATURE 7: 1-TAP AI PHOTO SCANNER (GALLERY IMAGE -> COMPRESS -> OCR FORM)
-  // ============================================================================
-  const compressImageForScan = (file: File): Promise<{ imageBase64: string; mimeType: string }> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('Failed to read selected photo file'));
-      reader.onload = () => {
-        const rawDataUrl = String(reader.result || '');
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const MAX_DIM = 1600;
-            let width = img.width;
-            let height = img.height;
-            if (width > MAX_DIM || height > MAX_DIM) {
-              if (width > height) {
-                height = Math.round((height * MAX_DIM) / width);
-                width = MAX_DIM;
-              } else {
-                width = Math.round((width * MAX_DIM) / height);
-                height = MAX_DIM;
-              }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-              resolve({ imageBase64: rawDataUrl, mimeType: file.type || 'image/jpeg' });
-              return;
-            }
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-            resolve({ imageBase64: compressedDataUrl, mimeType: 'image/jpeg' });
-          } catch {
-            resolve({ imageBase64: rawDataUrl, mimeType: file.type || 'image/jpeg' });
-          }
-        };
-        img.onerror = () => {
-          resolve({ imageBase64: rawDataUrl, mimeType: file.type || 'image/jpeg' });
-        };
-        img.src = rawDataUrl;
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const normalizeScannedDate = (rawDate?: string): string | null => {
-    if (!rawDate || typeof rawDate !== 'string') return null;
-    const trimmed = rawDate.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-    const dmyMatch = trimmed.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
-    if (dmyMatch) {
-      const dd = dmyMatch[1].padStart(2, '0');
-      const mm = dmyMatch[2].padStart(2, '0');
-      let yyyy = dmyMatch[3];
-      if (yyyy.length === 2) {
-        yyyy = `20${yyyy}`;
-      }
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    return null;
-  };
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsScanningPhoto(true);
-    setScanStatusMessage('Optimizing & scanning Performa photo with AI Vision...');
-
-    try {
-      const { imageBase64, mimeType } = await compressImageForScan(file);
-
-      let extracted: any = null;
-
-      const res = await fetch('/api/ai/scan-performa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64,
-          mimeType
-        })
-      });
-
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error(`Server returned non-JSON response (${res.status}). Please retry.`);
-      }
-
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || 'Could not parse performa photo');
-      }
-
-      extracted = json.data || {};
-
-      const nextItems = ensureCompleteMasterItems([]);
-      let scannedRowsCount = 0;
-
-      if (Array.isArray(extracted.activeRows)) {
-        for (const activeRow of extracted.activeRows) {
-          const rIdx = Number(activeRow.rowIndex);
-          if (!isNaN(rIdx) && rIdx >= 0 && rIdx < nextItems.length) {
-            const targetRow = { ...nextItems[rIdx] };
-            const rawQty =
-              activeRow.qty !== undefined && activeRow.qty !== null
-                ? String(activeRow.qty).trim()
-                : '';
-
-            if (targetRow.sizeFields && targetRow.sizeFields.length > 0) {
-              const nextSizeQtys = { ...(targetRow.sizeQtys || {}) };
-              if (activeRow.sizeQtys && typeof activeRow.sizeQtys === 'object') {
-                for (const sf of targetRow.sizeFields) {
-                  if (isNonZeroQtyValue(activeRow.sizeQtys[sf])) {
-                    nextSizeQtys[sf] = String(activeRow.sizeQtys[sf]).trim();
-                  }
-                }
-              } else if (
-                activeRow.sizeKey &&
-                targetRow.sizeFields.includes(String(activeRow.sizeKey)) &&
-                isNonZeroQtyValue(rawQty)
-              ) {
-                nextSizeQtys[String(activeRow.sizeKey)] = rawQty;
-              } else if (isNonZeroQtyValue(rawQty)) {
-                nextSizeQtys[targetRow.sizeFields[0]] = rawQty;
-              }
-              targetRow.sizeQtys = nextSizeQtys;
-              targetRow.qty = computeSummaryQtyFromSizes(targetRow.sizeFields, nextSizeQtys, '');
-            } else {
-              targetRow.qty = rawQty;
-            }
-
-            const hasQty = hasRowAnyQty(targetRow);
-            const isMatYes = hasQty ? true : Boolean(activeRow.materialYes);
-            const isLabYes = hasQty ? true : Boolean(activeRow.labourYes);
-
-            if (isMatYes || isLabYes || hasQty) {
-              scannedRowsCount++;
-              targetRow.materialYes = isMatYes;
-              targetRow.labourYes = isLabYes;
-              if (!hasQty && !targetRow.sizeFields && rIdx !== 10) {
-                targetRow.qty = 1;
-              }
-              nextItems[rIdx] = targetRow;
-            }
-          }
-        }
-      }
-
-      const hasScannedMeasurements = Boolean(
-        extracted.measurements?.voltageRN ||
-          extracted.measurements?.voltageYN ||
-          extracted.measurements?.voltageBN ||
-          extracted.measurements?.ampereR ||
-          extracted.measurements?.ampereY ||
-          extracted.measurements?.ampereB ||
-          extracted.measurements?.ampereN
-      );
-
-      // If Voltage/Ampere readings were detected on the sheet, ensure SR 8 (index 11) is marked active
-      if (hasScannedMeasurements && nextItems[11]) {
-        nextItems[11] = {
-          ...nextItems[11],
-          materialYes: true,
-          labourYes: true,
-          qty: isNonZeroQtyValue(nextItems[11].qty) ? nextItems[11].qty : 1
-        };
-      }
-
-      const nextMeasurements = {
-        ...(performa.measurements || {}),
-        ...(extracted.measurements?.voltageRN ? { voltageRN: String(extracted.measurements.voltageRN).trim() } : {}),
-        ...(extracted.measurements?.voltageYN ? { voltageYN: String(extracted.measurements.voltageYN).trim() } : {}),
-        ...(extracted.measurements?.voltageBN ? { voltageBN: String(extracted.measurements.voltageBN).trim() } : {}),
-        ...(extracted.measurements?.ampereR ? { ampereR: String(extracted.measurements.ampereR).trim() } : {}),
-        ...(extracted.measurements?.ampereY ? { ampereY: String(extracted.measurements.ampereY).trim() } : {}),
-        ...(extracted.measurements?.ampereB ? { ampereB: String(extracted.measurements.ampereB).trim() } : {}),
-        ...(extracted.measurements?.ampereN ? { ampereN: String(extracted.measurements.ampereN).trim() } : {})
-      };
-
-      const normalizedDate = normalizeScannedDate(extracted.date);
-      const nextDate = normalizedDate || performa.date;
-      if (normalizedDate) {
-        saveStickyDefaultDate(normalizedDate);
-      }
-
-      onChange({
-        ...performa,
-        location: extracted.location ? String(extracted.location).trim() : performa.location,
-        date: nextDate,
-        transformerMake: extracted.transformerMake ? String(extracted.transformerMake).trim() : performa.transformerMake,
-        transformerSerialNo: extracted.transformerSerialNo ? String(extracted.transformerSerialNo).trim() : performa.transformerSerialNo,
-        capacity: extracted.capacity ? String(extracted.capacity).replace(/kva/gi, '').trim() : performa.capacity,
-        items: nextItems,
-        measurements: nextMeasurements
-      });
-
-      setScanStatusMessage(
-        `AI Scan Complete! Extracted header details & ${scannedRowsCount} active maintenance rows. Review & click Save & Next.`
-      );
-      setTimeout(() => setScanStatusMessage(null), 8000);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'AI Photo Scan failed';
-      setScanStatusMessage(`Scan notice: ${msg}`);
-      setTimeout(() => setScanStatusMessage(null), 7000);
-    } finally {
-      setIsScanningPhoto(false);
-      if (photoInputRef.current) photoInputRef.current.value = '';
-    }
-  };
-
   // Active rows count
   const activeItemsCount = items.filter(
     i => i.materialYes || i.labourYes || hasRowAnyQty(i)
@@ -918,22 +483,13 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
 
   return (
     <div className="w-full flex flex-col items-center">
-      {/* Hidden file input for 1-Tap AI Photo Scanner (Gallery Picker) */}
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handlePhotoUpload}
-        className="hidden"
-      />
 
       {/* ============================================================================
           TOP COCKPIT CONTROL BAR: MODE SWITCHER, AI SCANNER & SMART MACRO PRESETS
       ============================================================================ */}
       {!isReadOnly && (
-        <div className="w-full max-w-[1040px] mb-3 bg-slate-900 border border-slate-700 rounded-xl p-2.5 sm:p-3.5 shadow-xl space-y-2.5 print:hidden">
-          {/* Row 1: Cockpit Mode Switcher + 1-Tap AI Photo Scan + Row Filter Toggle */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
+        <div className="w-full max-w-[1040px] mb-3 bg-slate-900 border border-slate-700 rounded-xl p-2.5 sm:p-3.5 shadow-xl print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
             {/* Left: Desktop Numpad vs Mobile 1-Tap Chip Mode */}
             <div className="flex flex-wrap items-center gap-1.5">
               <div className="inline-flex bg-slate-950 p-1 rounded-lg border border-slate-800">
@@ -965,26 +521,10 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   <span>Desktop Numpad Mode</span>
                 </button>
               </div>
-
-              {/* 1-Tap AI Photo Scan Button */}
-              <button
-                type="button"
-                disabled={isScanningPhoto}
-                onClick={() => photoInputRef.current?.click()}
-                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-60"
-                title="Select an image of a handwritten Performa sheet from gallery to auto-fill"
-              >
-                {isScanningPhoto ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Camera className="w-3.5 h-3.5" />
-                )}
-                <span>{isScanningPhoto ? 'Scanning Sheet...' : '📷 Scan Performa Photo'}</span>
-              </button>
             </div>
 
-            {/* Right: Row Filter Toggle */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            {/* Right: Row Filter Toggle & Search */}
+            <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-[11px] font-bold">
                 <button
                   type="button"
@@ -1021,164 +561,27 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   <span>Active Only ({activeItemsCount})</span>
                 </button>
               </div>
-            </div>
-          </div>
 
-          {/* AI Scan Status Banner */}
-          {scanStatusMessage && (
-            <div className="px-3 py-2 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs font-semibold flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {isScanningPhoto ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                )}
-                <span>{scanStatusMessage}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setScanStatusMessage(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* Row 2: FEATURE 4 — 1-CLICK SMART PRESET / MACRO TEMPLATES BAR */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 mr-1">
-                1-Tap Macros:
-              </span>
-
-              <button
-                type="button"
-                onClick={handleMacroRoutineService}
-                className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-                title="Sets SR 3=1, SR 5=1, SR 7=Yes, SR 8=1, SR 14=1, SR 15=1"
-              >
-                <Sparkles className="w-3 h-3 text-emerald-400" />
-                <span>⚡ Standard Routine Service</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleMacroBushingStudNutPack}
-                className="px-2.5 py-1 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-                title="Sets SR 1=4, SR 2=4, SR 16 (12MM/20MM)=8, SR 17 (12MM/20MM)=8"
-              >
-                <span>🔩 LT Bushing + Stud + Nut/Washer Pack</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleMacroBoxFuseCablePack}
-                className="px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-                title="Sets SR 6 (70)=3, SR 9=1, SR 10 (100Amp)=3, SR 13=3"
-              >
-                <span>📦 Box + Fuse + Cable Pack</span>
-              </button>
-
-              {previousPerforma && (
-                <button
-                  type="button"
-                  onClick={handleCopyPreviousPerforma}
-                  className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-                  title="Clones Date, Make, Capacity, and all rows from last saved performa; leaves Location & Serial blank"
-                >
-                  <Copy className="w-3 h-3" />
-                  <span>📋 Copy Previous Performa</span>
-                </button>
-              )}
-
-              {/* Custom User-Saved Macros */}
-              {customMacros.map(macro => (
-                <button
-                  key={macro.id}
-                  type="button"
-                  onClick={() => handleApplyCustomMacro(macro)}
-                  className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span>★ {macro.name}</span>
-                  <span
-                    onClick={(e) => handleDeleteCustomMacro(macro.id, e)}
-                    className="hover:text-red-400 px-0.5"
-                    title="Delete custom macro"
-                  >
-                    ×
-                  </span>
-                </button>
-              ))}
-
-              {/* Save Custom Macro Button */}
-              {isSavingMacro ? (
-                <div className="flex items-center gap-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-0.5">
-                  <input
-                    type="text"
-                    value={newMacroName}
-                    onChange={(e) => setNewMacroName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSaveCurrentAsCustomMacro()}
-                    placeholder="Preset name..."
-                    className="bg-transparent text-xs text-white outline-none w-24"
-                    autoFocus
-                  />
+              {/* Instant Row Search */}
+              <div className="relative w-full sm:w-56">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+                <input
+                  type="text"
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                  placeholder="Jump / filter SR or item..."
+                  className="w-full pl-8 pr-7 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500"
+                />
+                {itemSearch && (
                   <button
                     type="button"
-                    onClick={handleSaveCurrentAsCustomMacro}
-                    className="text-emerald-400 hover:text-emerald-300 p-0.5 cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsSavingMacro(false)}
-                    className="text-slate-400 hover:text-white p-0.5 cursor-pointer"
+                    onClick={() => setItemSearch('')}
+                    className="absolute right-2 top-1.5 text-slate-400 hover:text-white cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsSavingMacro(true)}
-                  className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                  title="Save current active rows as a custom 1-click macro button"
-                >
-                  <BookmarkPlus className="w-3 h-3 text-amber-400" />
-                  <span>+ Save Macro</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleClearAllRows}
-                className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>🗑️ Clear All</span>
-              </button>
-            </div>
-
-            {/* Instant Row Search */}
-            <div className="relative w-full sm:w-56">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-              <input
-                type="text"
-                value={itemSearch}
-                onChange={(e) => setItemSearch(e.target.value)}
-                placeholder="Jump / filter SR or item..."
-                className="w-full pl-8 pr-7 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500"
-              />
-              {itemSearch && (
-                <button
-                  type="button"
-                  onClick={() => setItemSearch('')}
-                  className="absolute right-2 top-1.5 text-slate-400 hover:text-white"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1792,14 +1195,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => photoInputRef.current?.click()}
-              className="p-2 bg-amber-500 text-slate-950 rounded-lg font-bold text-xs"
-              title="Scan Performa Photo"
-            >
-              <Camera className="w-4 h-4" />
-            </button>
             <button
               type="button"
               onClick={() => {

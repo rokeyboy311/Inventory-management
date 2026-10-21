@@ -119,21 +119,6 @@ export interface ImportSummary {
   workbookName: string;
 }
 
-export interface CustomMacroPreset {
-  id: string;
-  name: string;
-  description?: string;
-  itemsMap: Record<
-    number,
-    {
-      materialYes: boolean;
-      labourYes: boolean;
-      qty: number | string;
-      sizeQtys?: Record<string, number | string>;
-    }
-  >;
-}
-
 /**
  * CONSOLIDATED 23-ITEM MASTER LIST WITH SIZE-BASED QUANTITY SUB-FIELDS (SR 1 to 18)
  */
