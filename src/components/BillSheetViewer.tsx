@@ -20,9 +20,10 @@ interface BillSheetViewerProps {
   locationName: string;
   performas?: PerformaRecord[];
   onUpdateBill: (updated: BillSheetDefinition) => void;
+  onSwitchToInventory?: () => void;
 }
 
-export function BillSheetViewer({ billData, locationName, performas = [], onUpdateBill }: BillSheetViewerProps) {
+export function BillSheetViewer({ billData, locationName, performas = [], onUpdateBill, onSwitchToInventory }: BillSheetViewerProps) {
   const [bill, setBill] = useState<BillSheetDefinition>(billData);
   const [showSavedToast, setShowSavedToast] = useState(false);
 
@@ -157,6 +158,17 @@ export function BillSheetViewer({ billData, locationName, performas = [], onUpda
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {onSwitchToInventory && (
+            <button
+              type="button"
+              onClick={onSwitchToInventory}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              title="Return to Sheet 1: inventory to enter maintenance records"
+            >
+              <span>← Enter Records (Sheet 1)</span>
+            </button>
+          )}
+
           {performas.length > 0 && (
             <button
               type="button"

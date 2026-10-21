@@ -229,40 +229,7 @@ export function createNewLocationWorkbookWithDualSheets(locationName: string, te
   const trimmedLoc = locationName.trim();
   const cleanLoc = trimmedLoc.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_') || 'LOCATION';
   const locId = `loc_${cleanLoc.toLowerCase()}_${Date.now()}`;
-  const prefix = getDefaultPrefixForLocation(trimmedLoc);
-  const year = new Date().getFullYear();
-
-  // Create initial performa specifically for this location
-  const initialPerforma: PerformaRecord = {
-    id: `${prefix}001`,
-    date: new Date().toISOString().slice(0, 10),
-    location: trimmedLoc,
-    transformerRefNo: `TR-${prefix}01`,
-    transformerMake: 'Aman',
-    transformerSerialNo: '01',
-    capacity: '100',
-    division: 'ANKLESHWAR IND DIVISION',
-    subDivision: 'ANKLESHWAR GIDC SDN',
-    performaNo: `${prefix}001`,
-    workOrderNo: `WO/DGVCL/${cleanLoc.toUpperCase()}/${year}/001`,
-    serviceOrderNo: `SO/DGVCL/${cleanLoc.toUpperCase()}/${year}/001`,
-    measurements: {
-      voltageRN: '230',
-      voltageYN: '230',
-      voltageBN: '230',
-      ampereR: '0',
-      ampereY: '0',
-      ampereB: '0',
-      ampereN: '0'
-    },
-    items: ensureCompleteMasterItems([]),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    status: 'saved'
-  };
-
-  // Sheet 2 (bill) automatically reflects items from Sheet 1 (inventory)
-  const initialBill = syncBillFromInventory([initialPerforma], trimmedLoc);
+  const initialBill = syncBillFromInventory([], trimmedLoc);
 
   return {
     locationId: locId,
@@ -274,9 +241,9 @@ export function createNewLocationWorkbookWithDualSheets(locationName: string, te
       'inventory': {
         name: 'inventory',
         type: 'inventory',
-        performas: [initialPerforma],
+        performas: [],
         isCompatible: true,
-        rawRowsCount: 1
+        rawRowsCount: 0
       },
       'bill': {
         name: 'bill',
@@ -300,34 +267,48 @@ export function createNewLocationWorkbook(locationName: string): LocationWorkboo
 }
 
 /**
- * Loads all workbooks directly from the Supabase Master Database.
- * If Supabase is empty but local device has records (e.g. from desktop entry),
- * it automatically pushes the local records up to Supabase to keep all devices in sync.
+ * Loads all workbooks directly from the Supabase Master Database with authoritative local merging.
+ * Never drops locally created location workbooks.
  */
 export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
+  // Always read local cache first so offline records / newly added local workbooks are never lost
+  const localCache = await getLocalWorkbooksCache();
+
   // 1. Load directly from Supabase Master Database
   try {
     const remoteWorkbooks = await fetchWorkbooksFromSupabase();
     if (remoteWorkbooks) {
       if (remoteWorkbooks.length > 0) {
-        const optimizedList = remoteWorkbooks.map(w => optimizeWorkbookForStorage(w));
-        await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, optimizedList, 'performa_workbooks_v2');
-        return optimizedList;
+        // Authoritative merge by locationId: preserve all local workbooks
+        const map = new Map<string, LocationWorkbook>();
+        for (const w of remoteWorkbooks) {
+          map.set(w.locationId, optimizeWorkbookForStorage(w));
+        }
+
+        for (const lw of localCache) {
+          if (!map.has(lw.locationId)) {
+            // Local workbook not yet synced to remote: retain it and push to Supabase
+            map.set(lw.locationId, lw);
+            upsertWorkbookSupabase(lw).catch(() => {});
+          } else {
+            const rw = map.get(lw.locationId)!;
+            if (lw.lastModified && rw.lastModified && new Date(lw.lastModified) > new Date(rw.lastModified)) {
+              map.set(lw.locationId, lw);
+              upsertWorkbookSupabase(lw).catch(() => {});
+            }
+          }
+        }
+
+        const mergedList = Array.from(map.values());
+        await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, mergedList, 'performa_workbooks_v2');
+        return mergedList;
       } else {
-        // Supabase is ready but has 0 workbooks.
-        // Check if local cache has any user-entered workbooks to migrate!
-        const localList = await getLocalWorkbooksCache();
-        if (localList.length > 0) {
-          for (const wb of localList) {
+        // Supabase is ready but has 0 workbooks: push local cache up
+        if (localCache.length > 0) {
+          for (const wb of localCache) {
             await upsertWorkbookSupabase(wb);
           }
-          return localList;
-        } else {
-          // Seed initial Dolvan workbook into Supabase
-          const initial = [createInitialWorkbook('Dolvan')];
-          await upsertWorkbookSupabase(initial[0]);
-          await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, initial, 'performa_workbooks_v2');
-          return initial;
+          return localCache;
         }
       }
     }
@@ -336,12 +317,9 @@ export async function loadWorkbooksFromStorage(): Promise<LocationWorkbook[]> {
   }
 
   // 2. Offline fallback: IndexedDB / localStorage
-  const cached = await getLocalWorkbooksCache();
-  if (cached.length > 0) return cached;
+  if (localCache.length > 0) return localCache;
 
-  const initial = [createInitialWorkbook('Dolvan')];
-  await saveWorkbookToStorage(initial[0]);
-  return initial;
+  return [];
 }
 
 async function getLocalWorkbooksCache(): Promise<LocationWorkbook[]> {
@@ -371,27 +349,41 @@ async function getLocalWorkbooksCache(): Promise<LocationWorkbook[]> {
           resolve([]);
         }
       };
-      req.onerror = () => resolve([]);
+      req.onerror = () => {
+        const local = localStorage.getItem('performa_workbooks_v2');
+        if (local) {
+          try {
+            const parsed = JSON.parse(local);
+            if (Array.isArray(parsed)) {
+              resolve(parsed.map((w: any) => optimizeWorkbookForStorage(w)));
+              return;
+            }
+          } catch {}
+        }
+        resolve([]);
+      };
     });
   } catch {
+    const local = localStorage.getItem('performa_workbooks_v2');
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed)) {
+          return parsed.map((w: any) => optimizeWorkbookForStorage(w));
+        }
+      } catch {}
+    }
     return [];
   }
 }
 
 /**
- * Saves a single workbook directly to Supabase Master Database and updates local offline mirror.
+ * Saves a single workbook directly to local offline mirror first, then Supabase Master Database.
  */
 export async function saveWorkbookToStorage(workbook: LocationWorkbook): Promise<void> {
   const optimized = optimizeWorkbookForStorage(workbook);
 
-  // 1. Save directly to Supabase Master Database
-  try {
-    await upsertWorkbookSupabase(optimized);
-  } catch (err) {
-    console.warn('Supabase save workbook error:', err);
-  }
-
-  // 2. Update local offline mirror
+  // 1. Update local offline mirror FIRST so it is guaranteed immediately saved
   try {
     const localRaw = localStorage.getItem('performa_workbooks_v2');
     const currentList: LocationWorkbook[] = localRaw ? JSON.parse(localRaw) : [];
@@ -402,8 +394,15 @@ export async function saveWorkbookToStorage(workbook: LocationWorkbook): Promise
       currentList.push(optimized);
     }
     await syncLocalStoreAuthoritatively(STORE_WORKBOOKS, currentList, 'performa_workbooks_v2');
-  } catch {
-    // ignore
+  } catch (err) {
+    console.warn('Local save workbook error:', err);
+  }
+
+  // 2. Save directly to Supabase Master Database
+  try {
+    await upsertWorkbookSupabase(optimized);
+  } catch (err) {
+    console.warn('Supabase save workbook error:', err);
   }
 
   syncBroadcastChannel?.postMessage({ type: 'WORKBOOK_UPDATED', locationId: optimized.locationId });

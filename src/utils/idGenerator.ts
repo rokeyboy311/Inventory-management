@@ -121,7 +121,7 @@ export function findMatchingPerforma(
 export function normalizePerformaIdInput(
   rawId: string,
   existingPerformas: PerformaRecord[],
-  locationName: string = 'Dolvan'
+  locationName: string = 'Location'
 ): string {
   const trimmed = (rawId || '').trim();
   if (!trimmed) return '';

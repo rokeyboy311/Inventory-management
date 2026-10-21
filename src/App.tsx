@@ -158,11 +158,11 @@ export function App() {
   const toolbarFileInputRef = useRef<HTMLInputElement>(null);
 
   // Active workbook helper
-  const activeWorkbook = workbooks.find(w => w.locationId === activeLocationId) || workbooks[0];
+  const activeWorkbook = workbooks.find(w => w.locationId === activeLocationId) || (workbooks.length > 0 ? workbooks[0] : null);
   const effectiveSheetName = (activeWorkbook?.sheets && activeSheetName in activeWorkbook.sheets)
     ? activeSheetName
     : (activeWorkbook?.sheets && 'inventory' in activeWorkbook.sheets ? 'inventory' : Object.keys(activeWorkbook?.sheets || {})[0] || 'inventory');
-  const activeSheet = activeWorkbook?.sheets[effectiveSheetName];
+  const activeSheet = activeWorkbook?.sheets ? activeWorkbook.sheets[effectiveSheetName] : undefined;
   const activePerformas: PerformaRecord[] = activeSheet?.performas || [];
 
   // Show notification banner helper
@@ -276,7 +276,7 @@ export function App() {
   // -------------------------------------------------------------
   // Location Excel Creation (Dual Sheets: inventory + bill)
   // -------------------------------------------------------------
-  const handleCreateLocationWorkbook = async (locationName: string) => {
+  const handleCreateLocationWorkbook = async (locationName: string, autoEnter: boolean = false) => {
     const newWb = createNewLocationWorkbookWithDualSheets(locationName);
     const updated = [...workbooks, newWb];
     setWorkbooks(updated);
@@ -284,15 +284,21 @@ export function App() {
     setActiveSheetName('inventory');
     await saveWorkbookToStorage(newWb);
 
-    // Initial performa starts with sample data row (Location of Transformer kept separate)
-    const sample = newWb.sheets['inventory']?.performas[0] || createBlankPerforma('DOL-001', '');
-    setCurrentPerforma(sample);
-    setOriginalEditingId(sample.id);
-    initHistory(sample);
     setIsCreateLocationModalOpen(false);
-    setIsWorkbookOpen(true);
-    setMainViewTab('form');
-    showNotification(`Excel file "${newWb.workbookName}" created with 2 sheets: inventory & bill!`);
+
+    if (autoEnter) {
+      // Step 2: enter location excel file directly
+      const nextId = getNextPerformaId([], newWb.locationName);
+      const blank = createBlankPerforma(nextId, newWb.locationName);
+      setCurrentPerforma(blank);
+      setOriginalEditingId(null);
+      initHistory(blank);
+      setIsWorkbookOpen(true);
+      setMainViewTab('form');
+      showNotification(`Entered ${newWb.locationName} Excel (Sheet 1: inventory). Step 3: Enter your records!`);
+    } else {
+      showNotification(`Step 1 Done! Excel file "${newWb.workbookName}" created. Click "Enter File (Sheet 1)" to start.`);
+    }
   };
 
   // -------------------------------------------------------------
@@ -361,6 +367,7 @@ export function App() {
       ...activeWorkbook.sheets,
       [effectiveSheetName]: {
         ...activeSheet,
+        name: activeSheet.name || effectiveSheetName,
         performas: sortedPerformas,
         rawRowsCount: sortedPerformas.length
       },
@@ -380,9 +387,9 @@ export function App() {
       lastModified: new Date().toISOString()
     };
 
-    const updatedWorkbooks = workbooks.map(w => 
-      w.locationId === updatedWorkbook.locationId ? updatedWorkbook : w
-    );
+    const updatedWorkbooks = workbooks.some(w => w.locationId === updatedWorkbook.locationId)
+      ? workbooks.map(w => w.locationId === updatedWorkbook.locationId ? updatedWorkbook : w)
+      : [...workbooks, updatedWorkbook];
 
     setWorkbooks(updatedWorkbooks);
     saveWorkbookToStorage(updatedWorkbook);
@@ -395,12 +402,13 @@ export function App() {
 
   // Action: Save & Close / Save Draft
   const handleSaveAndClose = () => {
+    const currentLocName = activeWorkbook?.locationName || '';
     const normalizedId = normalizePerformaIdInput(
       currentPerforma.id,
       activePerformas,
-      activeWorkbook?.locationName || 'Dolvan'
+      currentLocName
     );
-    const updatedRec = { ...currentPerforma, id: normalizedId };
+    const updatedRec = { ...currentPerforma, id: normalizedId, location: currentPerforma.location || currentLocName };
     setCurrentPerforma(updatedRec);
     const success = saveCurrentPerformaInternal(updatedRec);
     if (success) {
@@ -416,12 +424,13 @@ export function App() {
 
   // Action: Save & Add Another (Continuous Entry with Sticky Date Memory)
   const handleSaveAndAddAnother = () => {
+    const currentLocName = activeWorkbook?.locationName || '';
     const normalizedId = normalizePerformaIdInput(
       currentPerforma.id,
       activePerformas,
-      activeWorkbook?.locationName || 'Dolvan'
+      currentLocName
     );
-    const updatedRec = { ...currentPerforma, id: normalizedId };
+    const updatedRec = { ...currentPerforma, id: normalizedId, location: currentPerforma.location || currentLocName };
     const success = saveCurrentPerformaInternal(updatedRec);
     if (!success) return;
 
@@ -430,9 +439,9 @@ export function App() {
       updatedRec
     ]);
 
-    const nextId = getNextPerformaId(updatedPerformas, activeWorkbook.locationName);
-    // Retain Sticky Date, clear Location, Make, Serial, Capacity, and all 33 rows
-    const freshPerforma = createBlankPerforma(nextId, '', updatedRec.date);
+    const nextId = getNextPerformaId(updatedPerformas, currentLocName);
+    // Retain Sticky Date, prefill current location
+    const freshPerforma = createBlankPerforma(nextId, currentLocName, updatedRec.date);
 
     setCurrentPerforma(freshPerforma);
     setOriginalEditingId(null);
@@ -446,7 +455,7 @@ export function App() {
   const handleStartNewPerforma = () => {
     if (!activeWorkbook) return;
     const nextId = getNextPerformaId(activePerformas, activeWorkbook.locationName);
-    const fresh = createBlankPerforma(nextId, '', currentPerforma.date);
+    const fresh = createBlankPerforma(nextId, activeWorkbook.locationName, currentPerforma.date);
     setCurrentPerforma(fresh);
     setOriginalEditingId(null);
     setDuplicateError(null);
@@ -472,6 +481,7 @@ export function App() {
 
   // Delete performa with confirmation & physical DB cleanup
   const handleDeletePerforma = async (idToDelete?: string) => {
+    if (!activeWorkbook || !activeSheet) return;
     const targetId = (idToDelete || currentPerforma.id).trim();
     if (!window.confirm(`Are you sure you want to permanently delete Performa ${targetId} from the database?`)) {
       return;
@@ -487,6 +497,7 @@ export function App() {
         ...activeWorkbook.sheets,
         [effectiveSheetName]: {
           ...activeSheet,
+          name: activeSheet.name || effectiveSheetName,
           performas: filtered,
           rawRowsCount: filtered.length
         },
@@ -518,7 +529,7 @@ export function App() {
       initHistory(nextToSelect);
     } else if (filtered.length === 0) {
       const nextId = getNextPerformaId([], activeWorkbook.locationName);
-      const fresh = createBlankPerforma(nextId, '');
+      const fresh = createBlankPerforma(nextId, activeWorkbook.locationName);
       setCurrentPerforma(fresh);
       setOriginalEditingId(null);
       initHistory(fresh);
@@ -592,14 +603,16 @@ export function App() {
         <SupabaseSyncBanner onSyncReady={reloadData} onOpenSettingsModal={() => setIsSupabaseModalOpen(true)} />
         <UserDashboard
           workbooks={workbooks}
-          onOpenWorkbook={(wb) => {
+          onOpenWorkbook={(wb, initialSheet = 'inventory') => {
             setActiveLocationId(wb.locationId);
-            const targetSheet = wb.sheets['inventory'] ? 'inventory' : Object.keys(wb.sheets)[0];
+            const targetSheet = (initialSheet && wb.sheets && wb.sheets[initialSheet])
+              ? initialSheet
+              : (wb.sheets && wb.sheets['inventory'] ? 'inventory' : Object.keys(wb.sheets || {})[0] || 'inventory');
             setActiveSheetName(targetSheet);
             setIsWorkbookOpen(true);
-            setMainViewTab('form');
+            setMainViewTab(targetSheet === 'bill' ? 'table' : 'form');
 
-            const sheet = wb.sheets[targetSheet];
+            const sheet = wb.sheets ? wb.sheets[targetSheet] : undefined;
             const performas = sheet?.performas || [];
             if (performas.length > 0) {
               setCurrentPerforma(performas[0]);
@@ -607,7 +620,7 @@ export function App() {
               initHistory(performas[0]);
             } else {
               const nextId = getNextPerformaId([], wb.locationName);
-              const blank = createBlankPerforma(nextId, '');
+              const blank = createBlankPerforma(nextId, wb.locationName);
               setCurrentPerforma(blank);
               setOriginalEditingId(null);
               initHistory(blank);
@@ -690,6 +703,7 @@ export function App() {
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Sheet 1: inventory</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 text-emerald-200 font-mono hidden sm:inline">Step 3: Records</span>
           </button>
 
           <button
@@ -704,6 +718,7 @@ export function App() {
           >
             <FileText className="w-3.5 h-3.5" />
             <span>Sheet 2: bill</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 text-cyan-200 font-mono hidden sm:inline">Step 4: View Bill</span>
           </button>
         </div>
 
@@ -806,6 +821,10 @@ export function App() {
             locationName={activeWorkbook?.locationName || 'Location'}
             performas={activePerformas}
             onUpdateBill={handleUpdateBillSheet}
+            onSwitchToInventory={() => {
+              setActiveSheetName('inventory');
+              setMainViewTab('form');
+            }}
           />
         ) : (
           // Sheet 1: Inventory Performa CRUD & Excel Data Table
