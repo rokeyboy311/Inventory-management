@@ -13,7 +13,6 @@ import {
   PlusCircle,
   Trash2,
   Keyboard,
-  Smartphone,
   MapPin,
   Search,
   Eye,
@@ -38,7 +37,6 @@ interface A4PerformaDocumentProps {
 
 const QUICK_MAKES = ['Aman', 'Voltamp', 'ABB', 'Crompton', 'Bharat Bijlee', 'Kotsons', 'Other'];
 const QUICK_CAPACITIES = ['10', '16', '25', '63', '63/22', '100', '200', '315', '500'];
-const QUICK_QTY_CHIPS = [1, 2, 3, 4, 6, 8];
 
 export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   performa,
@@ -60,14 +58,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
     () => ensureCompleteMasterItems(performa.items || []),
     [performa.items]
   );
-
-  // Entry mode: 'desktop_numpad' vs 'mobile_tap'
-  const [entryMode, setEntryMode] = useState<'desktop_numpad' | 'mobile_tap'>(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      return 'mobile_tap';
-    }
-    return 'desktop_numpad';
-  });
 
   // Row filter mode: 'all' | 'common' | 'active_only'
   const [rowFilterMode, setRowFilterMode] = useState<'all' | 'common' | 'active_only'>('all');
@@ -306,29 +296,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
   };
 
   // ============================================================================
-  // FEATURE 2: ZERO-KEYBOARD 1-TAP QUANTITY CHIPS
-  // ============================================================================
-  const handleTapQtyChip = (index: number, chipVal: number | 'clear' | 'plus') => {
-    if (isReadOnly) return;
-    if (chipVal === 'clear') {
-      handleItemQtyChange(index, '');
-      return;
-    }
-    if (chipVal === 'plus') {
-      const currNum = parseInt(String(items[index]?.qty || '0'), 10);
-      const nextNum = (isNaN(currNum) ? 0 : currNum) + 1;
-      handleItemQtyChange(index, nextNum);
-      return;
-    }
-    const currentQtyStr = String(items[index]?.qty ?? '').trim();
-    if (currentQtyStr === String(chipVal)) {
-      handleItemQtyChange(index, '');
-    } else {
-      handleItemQtyChange(index, chipVal);
-    }
-  };
-
-  // ============================================================================
   // FEATURE 3: DESKTOP "NUMPAD + ENTER" SPEED-RUNNER MODE
   // ============================================================================
   const visibleRowIndices = useMemo(() => {
@@ -485,53 +452,25 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
     <div className="w-full flex flex-col items-center">
 
       {/* ============================================================================
-          TOP COCKPIT CONTROL BAR: MODE SWITCHER, AI SCANNER & SMART MACRO PRESETS
+          TOP COCKPIT CONTROL BAR: PC KEYBOARD MODE & ROW FILTERS
       ============================================================================ */}
       {!isReadOnly && (
         <div className="w-full max-w-[1040px] mb-3 bg-slate-900 border border-slate-700 rounded-xl p-2.5 sm:p-3.5 shadow-xl print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
-            {/* Left: Desktop Numpad vs Mobile 1-Tap Chip Mode */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="inline-flex bg-slate-950 p-1 rounded-lg border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setEntryMode('mobile_tap')}
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    entryMode === 'mobile_tap'
-                      ? 'bg-emerald-600 text-white shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>1-Tap Chips Mode</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEntryMode('desktop_numpad');
-                    setTimeout(() => focusRowFirstInput(0), 50);
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    entryMode === 'desktop_numpad'
-                      ? 'bg-blue-600 text-white shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Keyboard className="w-3.5 h-3.5" />
-                  <span>Desktop Numpad Mode</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Right: Row Filter Toggle & Search */}
+            {/* Left: PC Mode Badge + Row Filters */}
             <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-bold text-slate-300">
+                <Keyboard className="w-3.5 h-3.5 text-blue-400" />
+                <span>PC Numpad Mode</span>
+              </div>
+
               <div className="inline-flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-[11px] font-bold">
                 <button
                   type="button"
                   onClick={() => setRowFilterMode('all')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
                     rowFilterMode === 'all'
-                      ? 'bg-slate-800 text-white'
+                      ? 'bg-slate-800 text-white shadow'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -540,9 +479,9 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <button
                   type="button"
                   onClick={() => setRowFilterMode('common')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
                     rowFilterMode === 'common'
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-indigo-600 text-white shadow'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -551,9 +490,9 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                 <button
                   type="button"
                   onClick={() => setRowFilterMode('active_only')}
-                  className={`px-2 py-1 rounded transition-colors cursor-pointer flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1 ${
                     rowFilterMode === 'active_only'
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-emerald-600 text-white shadow'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -561,27 +500,27 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                   <span>Active Only ({activeItemsCount})</span>
                 </button>
               </div>
+            </div>
 
-              {/* Instant Row Search */}
-              <div className="relative w-full sm:w-56">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-                <input
-                  type="text"
-                  value={itemSearch}
-                  onChange={(e) => setItemSearch(e.target.value)}
-                  placeholder="Jump / filter SR or item..."
-                  className="w-full pl-8 pr-7 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500"
-                />
-                {itemSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setItemSearch('')}
-                    className="absolute right-2 top-1.5 text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+            {/* Right: Instant Row Search */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+              <input
+                type="text"
+                value={itemSearch}
+                onChange={(e) => setItemSearch(e.target.value)}
+                placeholder="Jump / filter SR or item..."
+                className="w-full pl-8 pr-7 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500"
+              />
+              {itemSearch && (
+                <button
+                  type="button"
+                  onClick={() => setItemSearch('')}
+                  className="absolute right-2 top-1.5 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1037,50 +976,8 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                             )}
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between gap-1.5">
-                            {/* 1-Tap Quick Chips */}
-                            {!isReadOnly && (
-                              <div className="flex items-center gap-0.5 flex-wrap print:hidden">
-                                {QUICK_QTY_CHIPS.map(qNum => {
-                                  const isChipSelected = String(item.qty ?? '').trim() === String(qNum);
-                                  return (
-                                    <button
-                                      key={qNum}
-                                      type="button"
-                                      tabIndex={-1}
-                                      onClick={() => handleTapQtyChip(index, qNum)}
-                                      className={`w-6 h-6 sm:w-6 sm:h-6 rounded text-[11px] font-mono font-extrabold border transition-all cursor-pointer flex items-center justify-center ${
-                                        isChipSelected
-                                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs scale-105'
-                                          : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 border-slate-300'
-                                      }`}
-                                    >
-                                      {qNum}
-                                    </button>
-                                  );
-                                })}
-                                <button
-                                  type="button"
-                                  tabIndex={-1}
-                                  onClick={() => handleTapQtyChip(index, 'plus')}
-                                  className="w-6 h-6 rounded text-[11px] font-mono font-extrabold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 cursor-pointer flex items-center justify-center"
-                                  title="Increment QTY (+1)"
-                                >
-                                  +
-                                </button>
-                                <button
-                                  type="button"
-                                  tabIndex={-1}
-                                  onClick={() => handleTapQtyChip(index, 'clear')}
-                                  className="w-6 h-6 rounded text-[11px] font-mono font-extrabold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 cursor-pointer flex items-center justify-center"
-                                  title="Clear QTY & Reset to No"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Direct QTY Input */}
+                          <div className="flex items-center justify-center">
+                            {/* Direct QTY Input (PC Optimized) */}
                             <input
                               ref={(el) => {
                                 qtyInputRefs.current[index] = el;
@@ -1097,7 +994,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
                               onKeyDown={(e) => handleQtyKeyDown(e, index)}
                               onChange={(e) => handleItemQtyChange(index, e.target.value)}
                               placeholder="0"
-                              className={`w-14 sm:w-16 text-center px-1.5 py-1 border-2 rounded font-mono font-extrabold text-xs outline-none transition-all ${
+                              className={`w-20 text-center px-2 py-1 border-2 rounded-md font-mono font-extrabold text-xs outline-none transition-all ${
                                 hasQty
                                   ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
                                   : anyActive
@@ -1124,7 +1021,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
           FEATURE 6: "SAVE & NEXT PERFORMA" CONTINUOUS BATCH LOOP BAR
       ============================================================================ */}
       {!isReadOnly && (
-        <div className="w-full max-w-[1040px] mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 bg-slate-900 border border-slate-700 rounded-xl shadow-xl print:hidden mb-16 sm:mb-4">
+        <div className="w-full max-w-[1040px] mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 bg-slate-900 border border-slate-700 rounded-xl shadow-xl print:hidden mb-4">
           <div className="flex items-center justify-between sm:justify-start gap-3">
             {onDelete && isExisting && (
               <button
@@ -1167,43 +1064,6 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
             >
               <PlusCircle className="w-4 h-4" />
               <span>💾 Save &amp; Next Performa (Ctrl+Enter)</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Sticky Bottom Bar */}
-      {!isReadOnly && (
-        <div className="fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-700 p-2 shadow-2xl flex items-center justify-between gap-2 sm:hidden print:hidden">
-          <div className="flex flex-col min-w-0 pl-1">
-            <span className="text-[10px] text-emerald-400 font-mono font-bold">
-              {activeItemsCount}/{items.length} Active • Row #{excelRowPosition}
-            </span>
-            <span className="text-xs font-bold text-white truncate">
-              {performa.location || 'Enter Location'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                saveStickyDefaultDate(performa.date);
-                onSaveAndClose();
-              }}
-              className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                saveStickyDefaultDate(performa.date);
-                onSaveAndAddAnother();
-              }}
-              className="px-3.5 py-2 bg-emerald-500 text-slate-950 rounded-lg text-xs font-extrabold flex items-center gap-1"
-            >
-              <span>Save &amp; Next</span>
             </button>
           </div>
         </div>
