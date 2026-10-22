@@ -10,6 +10,12 @@ import {
 } from '../types/performa';
 import { syncBillFromInventory } from './billSync';
 import { getMasterItemsList } from './itemsMaster';
+import { 
+  calculateDgvclBillFromInventory, 
+  DgvclBillCalculationResult, 
+  getTenderTargetForLocation, 
+  getTenderPercentForLocation 
+} from './dgvclBillEngine';
 
 /**
  * Exact Column Specification for DOLVAN INVENTERY.xlsx -> Sheet1 (43 columns)
@@ -642,180 +648,468 @@ export function buildDolvanSheet1Worksheet(
 /**
  * Builds the Bill worksheet with professional DISCOM styling
  */
-export function buildBillWorksheet(billData?: BillSheetDefinition): XLSX.WorkSheet {
-  const b = billData || createDefaultBillSheet('Location');
+const BORDER_BILL_CELL = {
+  top: { style: 'thin', color: { rgb: '000000' } },
+  bottom: { style: 'thin', color: { rgb: '000000' } },
+  left: { style: 'thin', color: { rgb: '000000' } },
+  right: { style: 'thin', color: { rgb: '000000' } }
+};
 
-  const rows: any[][] = [
-    ['DGVCL TRANSFORMER MAINTENANCE BILL & ESTIMATE', '', '', '', '', '', '', '', ''],
-    ['Bill No:', b.billNumber, '', 'Date:', b.billDate, '', '', '', ''],
-    ['Contractor:', b.contractorName, '', 'Work Order:', b.workOrderRef, '', '', '', ''],
-    [],
-    ['SR NO', 'DESCRIPTION OF ITEM / WORK', 'UNIT', 'QUANTITY', 'MATERIAL RATE (₹)', 'LABOUR RATE (₹)', 'MATERIAL AMT (₹)', 'LABOUR AMT (₹)', 'TOTAL AMOUNT (₹)']
-  ];
+const BORDER_BILL_TOTAL = {
+  top: { style: 'thin', color: { rgb: '000000' } },
+  bottom: { style: 'double', color: { rgb: '000000' } },
+  left: { style: 'thin', color: { rgb: '000000' } },
+  right: { style: 'thin', color: { rgb: '000000' } }
+};
 
-  b.items.forEach((item, idx) => {
-    rows.push([
-      idx + 1,
-      item.description,
-      item.unit,
-      item.qty,
-      item.rate,
-      item.labourRate,
-      item.materialAmount,
-      item.labourAmount,
-      item.totalAmount
-    ]);
-  });
+/**
+ * Builds Page 1 of the official DGVCL SOR Bill: 'GST BILL'
+ * Reproduces the exact multi-row header, column layout, thin borders,
+ * formula linkages to inventory totals, and Page 1 bottom sum (=SUM(J9:J49)).
+ */
+export function buildGstBillWorksheet(
+  calc: DgvclBillCalculationResult,
+  invSheetName: string = 'inventory',
+  invTotalRow: number = 182
+): XLSX.WorkSheet {
+  const ws: XLSX.WorkSheet = {};
+  const merges: XLSX.Range[] = [];
 
-  const itemsEndRow = 4 + b.items.length;
-  rows.push([]);
-  rows.push(['', '', '', '', '', '', '', 'Sub-Total (₹):', b.subTotal]);
-  rows.push(['', '', '', '', '', '', '', 'GST (18%):', b.taxGst]);
-  rows.push(['', '', '', '', '', '', '', 'GRAND TOTAL (₹):', b.grandTotal]);
+  const safeInv = invSheetName.includes(' ') ? `'${invSheetName}'` : invSheetName;
 
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-
-  const BORDER_BILL_THIN = {
-    top: { style: 'thin', color: { rgb: 'CBD5E1' } },
-    bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
-    left: { style: 'thin', color: { rgb: 'CBD5E1' } },
-    right: { style: 'thin', color: { rgb: 'CBD5E1' } }
-  };
-
-  const BORDER_BILL_DOUBLE = {
-    top: { style: 'thin', color: { rgb: '0F172A' } },
-    bottom: { style: 'double', color: { rgb: '0F172A' } },
-    left: { style: 'thin', color: { rgb: '0F172A' } },
-    right: { style: 'thin', color: { rgb: '0F172A' } }
-  };
-
-  // Merges
-  ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
-    { s: { r: 1, c: 1 }, e: { r: 1, c: 2 } },
-    { s: { r: 1, c: 4 }, e: { r: 1, c: 6 } },
-    { s: { r: 2, c: 1 }, e: { r: 2, c: 2 } },
-    { s: { r: 2, c: 4 }, e: { r: 2, c: 6 } }
-  ];
-
-  // Title Row (r: 0)
-  for (let c = 0; c <= 8; c++) {
-    const ref = XLSX.utils.encode_cell({ r: 0, c });
-    ws[ref] = ws[ref] || { t: 's', v: '' };
-    ws[ref].s = {
-      font: { name: 'Arial', sz: 13, bold: true, color: { rgb: 'FFFFFF' } },
-      fill: { fgColor: { rgb: '0F766E' } },
-      alignment: { vertical: 'center', horizontal: 'center' }
+  // Row 2-7: Multi-row Headers
+  const setCell = (r: number, c: number, v: any, bold: boolean = false, align: 'center' | 'left' | 'right' = 'center', f?: string) => {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    const cell: any = {
+      t: typeof v === 'number' ? 'n' : 's',
+      v: v ?? '',
+      s: {
+        font: { name: 'Arial', sz: 9, bold, color: { rgb: '000000' } },
+        alignment: { vertical: 'center', horizontal: align, wrapText: true },
+        border: BORDER_BILL_CELL
+      }
     };
-  }
+    if (f) cell.f = f;
+    ws[addr] = cell;
+  };
 
-  // Meta Rows (r: 1 & 2)
-  for (let r = 1; r <= 2; r++) {
-    for (let c = 0; c <= 8; c++) {
-      const ref = XLSX.utils.encode_cell({ r, c });
-      if (ws[ref]) {
-        const isLabel = c === 0 || c === 3;
-        ws[ref].s = {
-          font: { name: 'Arial', sz: 9.5, bold: isLabel, color: { rgb: isLabel ? '0F172A' : '334155' } },
-          alignment: { vertical: 'center', horizontal: 'left' }
-        };
-      }
+  // Setup grid empty borders for header rows 1 to 7
+  for (let r = 1; r <= 7; r++) {
+    for (let c = 1; c <= 11; c++) {
+      setCell(r, c, '');
     }
   }
 
-  // Table Header Row (r: 4)
-  for (let c = 0; c <= 8; c++) {
-    const ref = XLSX.utils.encode_cell({ r: 4, c });
-    if (ws[ref]) {
-      ws[ref].s = {
-        font: { name: 'Arial', sz: 9.5, bold: true, color: { rgb: '0F172A' } },
-        fill: { fgColor: { rgb: 'E2E8F0' } },
-        alignment: { vertical: 'center', horizontal: 'center' },
-        border: BORDER_BILL_THIN
-      };
-    }
+  // Header Titles
+  setCell(1, 1, 'Sr No.', true, 'center');
+  setCell(1, 2, 'Unit', true, 'center');
+  setCell(1, 3, 'Quantity executed (or supplied', true, 'center');
+  setCell(4, 3, 'Since\nprevious\nbill ARC', true, 'center');
+  setCell(4, 4, 'Qty\nexecuted\nin this bill', true, 'center');
+  setCell(1, 5, 'Items of work or supplies\n(grouped under Sub-heads of\nSub-works or estimates)', true, 'center');
+  setCell(1, 7, 'Rate', true, 'center');
+  setCell(1, 8, 'Amount', true, 'center');
+  setCell(3, 8, 'Since\nprevious\nbill total\nfor each', true, 'center');
+  setCell(3, 9, 'Qty\nexecuted\nin this\nbill total', true, 'center');
+  setCell(4, 10, 'Up to\ndate', true, 'center');
+  setCell(1, 11, 'Remark', true, 'center');
+
+  // Header Merges
+  merges.push(
+    { s: { r: 1, c: 1 }, e: { r: 6, c: 1 } },
+    { s: { r: 1, c: 2 }, e: { r: 6, c: 2 } },
+    { s: { r: 1, c: 3 }, e: { r: 3, c: 4 } },
+    { s: { r: 4, c: 3 }, e: { r: 6, c: 3 } },
+    { s: { r: 4, c: 4 }, e: { r: 6, c: 4 } },
+    { s: { r: 1, c: 5 }, e: { r: 6, c: 6 } },
+    { s: { r: 1, c: 7 }, e: { r: 6, c: 7 } },
+    { s: { r: 1, c: 8 }, e: { r: 2, c: 10 } },
+    { s: { r: 3, c: 8 }, e: { r: 6, c: 8 } },
+    { s: { r: 3, c: 9 }, e: { r: 6, c: 9 } },
+    { s: { r: 4, c: 10 }, e: { r: 6, c: 10 } },
+    { s: { r: 1, c: 11 }, e: { r: 6, c: 11 } }
+  );
+
+  // Row 8 (r: 7): Column numbering
+  const colNums = ['', 1, 2, 3, 4, 5, '', 6, 7, 8, 9, 10];
+  for (let c = 1; c <= 11; c++) {
+    setCell(7, c, colNums[c] ?? '', true, 'center');
   }
 
-  // Data Rows
-  const itemsStartRow = 5;
-  for (let r = itemsStartRow; r <= itemsEndRow; r++) {
-    for (let c = 0; c <= 8; c++) {
-      const ref = XLSX.utils.encode_cell({ r, c });
-      if (!ws[ref]) ws[ref] = { t: 's', v: '' };
-      let align: 'center' | 'left' | 'right' = 'center';
-      if (c === 1) align = 'left';
-      else if (c >= 4) align = 'right';
-      const isBold = c === 0 || c === 3 || c === 8;
-      ws[ref].s = {
-        font: { name: 'Arial', sz: 9, bold: isBold, color: { rgb: '0F172A' } },
-        alignment: { vertical: 'center', horizontal: align },
-        border: BORDER_BILL_THIN
-      };
+  // Page 1 Item Rows (Rows 9 to 49, r: 8 to 48)
+  const items = calc.page1Items;
+  for (let r = 8; r <= 48; r++) {
+    const item = items[r - 8];
+    for (let c = 1; c <= 11; c++) {
+      setCell(r, c, '');
     }
+    merges.push({ s: { r, c: 5 }, e: { r, c: 6 } });
+
+    if (!item) continue;
+
+    const rowNum = r + 1;
+    // Sr No
+    setCell(r, 1, item.description.startsWith('Checking') || item.description === 'Half Stud' ? '' : (item.srNo === 1 ? '1' : String(item.remarks?.includes('Header') ? '' : (item.id.replace('dgvcl-item-', '').replace(/_/g, '.').split('-')[0]))), false, 'center');
+    // Unit
+    setCell(r, 2, item.unit || '', false, 'center');
+    // Qty Executed Since Previous Bill
+    setCell(r, 3, '', false, 'center');
+
+    // Qty in This Bill (with formula if applicable)
+    let qtyFormula: string | undefined = undefined;
+    if (rowNum === 9) qtyFormula = 'E10+E11';
+    else if (rowNum === 10) qtyFormula = `${safeInv}!$H$${invTotalRow}`;
+    else if (rowNum === 11) qtyFormula = `${safeInv}!$G$${invTotalRow}`;
+    else if (rowNum === 12) qtyFormula = `${safeInv}!$I$${invTotalRow}+${safeInv}!$J$${invTotalRow}`;
+    else if (rowNum === 13) qtyFormula = 'E12';
+    else if (rowNum === 14) qtyFormula = `${safeInv}!$K$${invTotalRow}`;
+    else if (rowNum === 15) qtyFormula = 'E14';
+    else if (rowNum === 16) qtyFormula = `${safeInv}!$L$${invTotalRow}`;
+    else if (rowNum === 17) qtyFormula = `${safeInv}!$M$${invTotalRow}`;
+    else if (rowNum === 18) qtyFormula = `${safeInv}!$P$${invTotalRow}`;
+    else if (rowNum === 19) qtyFormula = `${safeInv}!$Q$${invTotalRow}`;
+    else if (rowNum === 21) qtyFormula = `${safeInv}!$R$${invTotalRow}`;
+    else if (rowNum === 22) qtyFormula = `${safeInv}!$S$${invTotalRow}`;
+    else if (rowNum === 23) qtyFormula = `${safeInv}!$T$${invTotalRow}`;
+    else if (rowNum === 24) qtyFormula = 'E23+E22+E21+E19';
+    else if (rowNum === 26) qtyFormula = `${safeInv}!$U$${invTotalRow}`;
+    else if (rowNum === 30) qtyFormula = `${safeInv}!$W$${invTotalRow}`;
+    else if (rowNum === 32) qtyFormula = `${safeInv}!$X$${invTotalRow}`;
+    else if (rowNum === 33) qtyFormula = `${safeInv}!$Y$${invTotalRow}`;
+    else if (rowNum === 35) qtyFormula = `${safeInv}!$Z$${invTotalRow}`;
+    else if (rowNum === 36) qtyFormula = `${safeInv}!$AA$${invTotalRow}`;
+    else if (rowNum === 37) qtyFormula = `${safeInv}!$AB$${invTotalRow}`;
+    else if (rowNum === 38) qtyFormula = 'E35+E36+E37';
+    else if (rowNum === 40) qtyFormula = `${safeInv}!$AC$${invTotalRow}`;
+    else if (rowNum === 41) qtyFormula = `${safeInv}!$AD$${invTotalRow}`;
+    else if (rowNum === 42) qtyFormula = `${safeInv}!$AE$${invTotalRow}`;
+    else if (rowNum === 43) qtyFormula = `${safeInv}!$AF$${invTotalRow}`;
+    else if (rowNum === 44) qtyFormula = 'E43';
+    else if (rowNum === 45) qtyFormula = `${safeInv}!$AG$${invTotalRow}`;
+    else if (rowNum === 46) qtyFormula = `${safeInv}!$AH$${invTotalRow}`;
+    else if (rowNum === 49) qtyFormula = `${safeInv}!$AP$${invTotalRow}`;
+
+    setCell(r, 4, item.qty > 0 || qtyFormula ? item.qty : '', false, 'center', qtyFormula);
+
+    // Description of Item
+    setCell(r, 5, item.description, item.remarks === 'Category Header', 'left');
+
+    // Rate
+    setCell(r, 7, item.rate > 0 ? item.rate : '', false, 'right');
+
+    // Amount = H{rowNum} * E{rowNum}
+    const amtFormula = item.rate > 0 ? `H${rowNum}*E${rowNum}` : undefined;
+    setCell(r, 9, item.totalAmount > 0 || amtFormula ? item.totalAmount : '', true, 'right', amtFormula);
+
+    // Remark
+    setCell(r, 11, rowNum === 9 ? 'Full Rate recommended' : '', false, 'center');
   }
 
-  // Summary Rows
-  const totalRowsCount = rows.length;
-  for (let r = itemsEndRow + 2; r < totalRowsCount; r++) {
-    const isGrand = r === totalRowsCount - 1;
-    for (let c = 7; c <= 8; c++) {
-      const ref = XLSX.utils.encode_cell({ r, c });
-      if (ws[ref]) {
-        ws[ref].s = {
-          font: { name: 'Arial', sz: isGrand ? 11 : 9.5, bold: true, color: { rgb: isGrand ? '047857' : '0F172A' } },
-          alignment: { vertical: 'center', horizontal: 'right' },
-          fill: isGrand ? { fgColor: { rgb: 'ECFDF5' } } : undefined,
-          border: isGrand ? BORDER_BILL_DOUBLE : BORDER_BILL_THIN
-        };
-      }
-    }
+  // Row 50 (r: 49): TOTAL OF PAGE
+  for (let c = 1; c <= 11; c++) {
+    setCell(49, c, '');
   }
+  setCell(49, 1, 'TOTAL OF PAGE', true, 'center');
+  merges.push({ s: { r: 49, c: 1 }, e: { r: 49, c: 6 } });
+  setCell(49, 9, calc.page1Total, true, 'right', 'SUM(J9:J49)');
 
+  // Row 58 footnote
+  setCell(57, 1, '*The second signature is only necessary when the officer who prepared the bill not the officer who makes the payment.', false, 'left');
+  merges.push({ s: { r: 57, c: 1 }, e: { r: 57, c: 11 } });
+
+  ws['!merges'] = merges;
   ws['!cols'] = [
-    { wch: 8 },   // SR NO
-    { wch: 45 },  // DESCRIPTION
-    { wch: 10 },  // UNIT
-    { wch: 12 },  // QTY
-    { wch: 18 },  // MAT RATE
-    { wch: 18 },  // LAB RATE
-    { wch: 18 },  // MAT AMT
-    { wch: 18 },  // LAB AMT
-    { wch: 20 }   // TOTAL AMT
+    { wch: 3 },   // A
+    { wch: 8 },   // B: Sr No
+    { wch: 8 },   // C: Unit
+    { wch: 10 },  // D: Since prev
+    { wch: 12 },  // E: Qty
+    { wch: 45 },  // F: Description
+    { wch: 10 },  // G
+    { wch: 10 },  // H: Rate
+    { wch: 12 },  // I: Prev amount
+    { wch: 14 },  // J: Amount
+    { wch: 14 },  // K: Up to date
+    { wch: 22 }   // L: Remark
   ];
-
-  ws['!rows'] = [
-    { hpt: 30, hpx: 40 },
-    { hpt: 20, hpx: 26 },
-    { hpt: 20, hpx: 26 },
-    { hpt: 10, hpx: 14 },
-    { hpt: 24, hpx: 32 },
-    ...b.items.map(() => ({ hpt: 20, hpx: 26 })),
-    { hpt: 10, hpx: 14 },
-    { hpt: 20, hpx: 26 },
-    { hpt: 20, hpx: 26 },
-    { hpt: 24, hpx: 32 }
-  ];
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 60, c: 11 } });
+  ws['!views'] = [{ showGridLines: true }];
 
   return ws;
 }
 
 /**
- * Exports a dual-sheet Excel file containing both 'inventory' and 'bill' sheets!
- * Filename matches the exact location name, and Sheet 2 (bill) reflects all material added in Sheet 1 (inventory).
+ * Builds Page 2 of the official DGVCL SOR Bill: 'GST BILL 2'
+ * Reproduces the FIRST PAGE TOTAL carry forward ('GST BILL'!J50), remaining items & labor,
+ * Total (A), Above 20% tender premium, Net Total, GST 18%, Grand Total,
+ * and the official Certificates and Signature blocks.
+ */
+export function buildGstBill2Worksheet(
+  calc: DgvclBillCalculationResult,
+  invSheetName: string = 'inventory',
+  invTotalRow: number = 182
+): XLSX.WorkSheet {
+  const ws: XLSX.WorkSheet = {};
+  const merges: XLSX.Range[] = [];
+
+  const safeInv = invSheetName.includes(' ') ? `'${invSheetName}'` : invSheetName;
+
+  const setCell = (r: number, c: number, v: any, bold: boolean = false, align: 'center' | 'left' | 'right' = 'center', f?: string) => {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    const cell: any = {
+      t: typeof v === 'number' ? 'n' : 's',
+      v: v ?? '',
+      s: {
+        font: { name: 'Arial', sz: 9, bold, color: { rgb: '000000' } },
+        alignment: { vertical: 'center', horizontal: align, wrapText: true },
+        border: BORDER_BILL_CELL
+      }
+    };
+    if (f) cell.f = f;
+    ws[addr] = cell;
+  };
+
+  // Row 1: Page number indicator '2'
+  setCell(0, 1, 2, true, 'center');
+  merges.push({ s: { r: 0, c: 1 }, e: { r: 0, c: 11 } });
+
+  // Setup grid empty borders for header rows 1 to 7
+  for (let r = 1; r <= 7; r++) {
+    for (let c = 1; c <= 11; c++) {
+      setCell(r, c, '');
+    }
+  }
+
+  // Header Titles
+  setCell(1, 1, 'Sr No.', true, 'center');
+  setCell(1, 2, 'Unit', true, 'center');
+  setCell(1, 3, 'Quantity executed (or supplied', true, 'center');
+  setCell(4, 3, 'Since\nprevious\nbill ARC', true, 'center');
+  setCell(4, 4, 'Qty\nexecuted\nin this bill', true, 'center');
+  setCell(1, 5, 'Items of work or supplies\n(grouped under Sub-heads of\nSub-works or estimates)', true, 'center');
+  setCell(1, 7, 'Rate', true, 'center');
+  setCell(1, 8, 'Amount', true, 'center');
+  setCell(3, 8, 'Since\nprevious\nbill total\nfor each', true, 'center');
+  setCell(3, 9, 'Qty\nexecuted\nin this\nbill total', true, 'center');
+  setCell(4, 10, 'Up to\ndate', true, 'center');
+  setCell(1, 11, 'Remark', true, 'center');
+
+  // Header Merges
+  merges.push(
+    { s: { r: 1, c: 1 }, e: { r: 6, c: 1 } },
+    { s: { r: 1, c: 2 }, e: { r: 6, c: 2 } },
+    { s: { r: 1, c: 3 }, e: { r: 3, c: 4 } },
+    { s: { r: 4, c: 3 }, e: { r: 6, c: 3 } },
+    { s: { r: 4, c: 4 }, e: { r: 6, c: 4 } },
+    { s: { r: 1, c: 5 }, e: { r: 6, c: 6 } },
+    { s: { r: 1, c: 7 }, e: { r: 6, c: 7 } },
+    { s: { r: 1, c: 8 }, e: { r: 2, c: 10 } },
+    { s: { r: 3, c: 8 }, e: { r: 6, c: 8 } },
+    { s: { r: 3, c: 9 }, e: { r: 6, c: 9 } },
+    { s: { r: 4, c: 10 }, e: { r: 6, c: 10 } },
+    { s: { r: 1, c: 11 }, e: { r: 6, c: 11 } }
+  );
+
+  // Row 8 (r: 7): Column numbering
+  const colNums = ['', 1, 2, 3, 4, 5, '', 6, 7, 8, 9, 10];
+  for (let c = 1; c <= 11; c++) {
+    setCell(7, c, colNums[c] ?? '', true, 'center');
+  }
+
+  // Row 9 (r: 8): FIRST PAGE TOTAL
+  for (let c = 1; c <= 11; c++) setCell(8, c, '');
+  setCell(8, 5, 'FIRST PAGE TOTAL', true, 'left');
+  merges.push({ s: { r: 8, c: 5 }, e: { r: 8, c: 6 } });
+  setCell(8, 9, calc.page1Total, true, 'right', "'GST BILL'!J50");
+  setCell(8, 11, 'Full Rate recommended', false, 'center');
+
+  // Page 2 Items (Rows 10 to 24, r: 9 to 23)
+  const items = calc.page2Items;
+  for (let r = 9; r <= 23; r++) {
+    const item = items[r - 9];
+    for (let c = 1; c <= 11; c++) setCell(r, c, '');
+    merges.push({ s: { r, c: 5 }, e: { r, c: 6 } });
+
+    if (!item) continue;
+    const rowNum = r + 1;
+
+    setCell(r, 1, item.remarks === 'Category Header' ? '' : (item.id.replace('dgvcl-item-', '').replace(/_/g, '.').split('-')[0]), false, 'center');
+    setCell(r, 2, item.unit || '', false, 'center');
+    setCell(r, 3, '', false, 'center');
+
+    let qtyFormula: string | undefined = undefined;
+    if (rowNum === 10) qtyFormula = `${safeInv}!$AQ$${invTotalRow}`;
+    else if (rowNum === 11) qtyFormula = 'E10';
+    else if (rowNum === 13) qtyFormula = `${safeInv}!$AI$${invTotalRow}`;
+    else if (rowNum === 14) qtyFormula = `${safeInv}!$AJ$${invTotalRow}`;
+    else if (rowNum === 15) qtyFormula = `${safeInv}!$AK$${invTotalRow}`;
+    else if (rowNum === 16) qtyFormula = 'E15+E14+E13';
+    else if (rowNum === 17) qtyFormula = `${safeInv}!$AL$${invTotalRow}`;
+    else if (rowNum === 18) qtyFormula = `${safeInv}!$AM$${invTotalRow}`;
+    else if (rowNum === 20) qtyFormula = 'E17+E19+E18';
+    else if (rowNum === 23) qtyFormula = `${safeInv}!$AO$${invTotalRow}`;
+    else if (rowNum === 24) qtyFormula = 'E23';
+
+    setCell(r, 4, item.qty > 0 || qtyFormula ? item.qty : '', false, 'center', qtyFormula);
+    setCell(r, 5, item.description, item.remarks === 'Category Header', 'left');
+    setCell(r, 7, item.rate > 0 ? item.rate : '', false, 'right');
+
+    const amtFormula = item.rate > 0 ? `H${rowNum}*E${rowNum}` : undefined;
+    setCell(r, 9, item.totalAmount > 0 || amtFormula ? item.totalAmount : '', true, 'right', amtFormula);
+  }
+
+  // Summary Rows 25 to 30 (r: 24 to 29)
+  // Row 25: Total value of work done (A)
+  for (let c = 1; c <= 11; c++) setCell(24, c, '');
+  setCell(24, 1, 'Total value of work done or supplies made to date (A)….→', true, 'left');
+  merges.push({ s: { r: 24, c: 1 }, e: { r: 24, c: 6 } });
+  setCell(24, 7, 'Total ', true, 'right');
+  merges.push({ s: { r: 24, c: 7 }, e: { r: 24, c: 9 } });
+  setCell(24, 10, calc.workDoneTotalA, true, 'right', 'SUM(J9:J24)');
+  merges.push({ s: { r: 24, c: 10 }, e: { r: 24, c: 11 } });
+
+  // Row 26: Above 20 %
+  for (let c = 1; c <= 11; c++) setCell(25, c, '');
+  setCell(25, 1, `Above${calc.tenderPercentage}  %`, true, 'left');
+  merges.push({ s: { r: 25, c: 1 }, e: { r: 25, c: 6 } });
+  setCell(25, 7, `Above ${calc.tenderPercentage} %`, true, 'right');
+  merges.push({ s: { r: 25, c: 7 }, e: { r: 25, c: 9 } });
+  setCell(25, 10, calc.aboveTenderAmount, true, 'right', `(K25*${calc.tenderPercentage})/100`);
+  merges.push({ s: { r: 25, c: 10 }, e: { r: 25, c: 11 } });
+
+  // Row 27: Net Total
+  for (let c = 1; c <= 11; c++) setCell(26, c, '');
+  setCell(26, 1, 'TOTAL ', true, 'left');
+  merges.push({ s: { r: 26, c: 1 }, e: { r: 26, c: 6 } });
+  setCell(26, 7, 'Net Total', true, 'right');
+  merges.push({ s: { r: 26, c: 7 }, e: { r: 26, c: 9 } });
+  setCell(26, 10, calc.netTotal, true, 'right', 'K25+K26');
+  merges.push({ s: { r: 26, c: 10 }, e: { r: 26, c: 11 } });
+
+  // Row 28: GST Extra (18%)
+  for (let c = 1; c <= 11; c++) setCell(27, c, '');
+  setCell(27, 7, 'GST Extra (18%) (1)', true, 'right');
+  merges.push({ s: { r: 27, c: 7 }, e: { r: 27, c: 9 } });
+  setCell(27, 10, calc.taxGst, true, 'right', 'K27*0.18');
+  merges.push({ s: { r: 27, c: 10 }, e: { r: 27, c: 11 } });
+
+  // Row 29: Round Off
+  for (let c = 1; c <= 11; c++) setCell(28, c, '');
+  setCell(28, 7, 'Round Off 2', true, 'right');
+  merges.push({ s: { r: 28, c: 7 }, e: { r: 28, c: 9 } });
+  setCell(28, 10, 0, false, 'right');
+  merges.push({ s: { r: 28, c: 10 }, e: { r: 28, c: 11 } });
+
+  // Row 30: Grand Total
+  for (let c = 1; c <= 11; c++) setCell(29, c, '');
+  setCell(29, 7, 'Grand Total (1+2)', true, 'right');
+  merges.push({ s: { r: 29, c: 7 }, e: { r: 29, c: 9 } });
+  setCell(29, 10, calc.grandTotal, true, 'right', 'SUM(K27:K29)');
+  merges.push({ s: { r: 29, c: 10 }, e: { r: 29, c: 11 } });
+
+  // Row 33: Remarks
+  setCell(32, 1, 'REMARKS:-', true, 'left');
+
+  // Certificate and Signatures (matching reference sheet)
+  setCell(49, 1, 'II   CERTIFICATES AND SIGNATURES', true, 'left');
+  merges.push({ s: { r: 49, c: 1 }, e: { r: 49, c: 10 } });
+
+  setCell(51, 1, ' The measurements were made by __________________________________________on _______________________________________________________and are Recorded at page ', false, 'left');
+  merges.push({ s: { r: 51, c: 1 }, e: { r: 51, c: 11 } });
+
+  setCell(52, 1, '________________ of  measurement  Book  No :_________________________No  advance  payment  hes been made previously  without  detailed  measurments.   ', false, 'left');
+  merges.push({ s: { r: 52, c: 1 }, e: { r: 52, c: 11 } });
+
+  setCell(53, 1, '____________________%checked  By  me', false, 'left');
+  merges.push({ s: { r: 53, c: 1 }, e: { r: 53, c: 11 } });
+
+  setCell(56, 3, 'Dated  signature of ', false, 'center');
+  setCell(57, 3, 'Officer preparing the bill"', false, 'center');
+  setCell(59, 6, 'Dy.Engr./Jr. Engr.', true, 'center');
+
+  setCell(63, 3, 'Dated  signature of ', false, 'center');
+  setCell(64, 3, 'Officer  Authorising the bill"', false, 'center');
+
+  setCell(68, 3, 'Signature of', false, 'center');
+  setCell(69, 3, 'the Contractor', true, 'center');
+
+  setCell(71, 1, ' *The second signature is only necessary when the officer who prepared the bill not the officer who makes the payment.', false, 'left');
+  merges.push({ s: { r: 71, c: 1 }, e: { r: 71, c: 11 } });
+
+  ws['!merges'] = merges;
+  ws['!cols'] = [
+    { wch: 3 },   // A
+    { wch: 8 },   // B: Sr No
+    { wch: 8 },   // C: Unit
+    { wch: 10 },  // D: Since prev
+    { wch: 12 },  // E: Qty
+    { wch: 45 },  // F: Description
+    { wch: 10 },  // G
+    { wch: 10 },  // H: Rate
+    { wch: 12 },  // I: Prev amount
+    { wch: 14 },  // J: Amount
+    { wch: 14 },  // K: Up to date
+    { wch: 22 }   // L: Remark
+  ];
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 73, c: 11 } });
+  ws['!views'] = [{ showGridLines: true }];
+
+  return ws;
+}
+
+/**
+ * Backward compatible wrapper for buildBillWorksheet that returns GST BILL
+ */
+export function buildBillWorksheet(billData?: BillSheetDefinition): XLSX.WorkSheet {
+  const calc = calculateDgvclBillFromInventory([], 'DOLVAN', {
+    tenderTargetAmount: billData?.tenderTargetAmount ?? 2000000,
+    tenderPercentage: billData?.tenderPercentage ?? 20,
+    billNumber: billData?.billNumber,
+    billDate: billData?.billDate,
+    contractorName: billData?.contractorName,
+    workOrderRef: billData?.workOrderRef
+  });
+  return buildGstBillWorksheet(calc);
+}
+
+/**
+ * Exports the authentic 3-sheet DISCOM workbook:
+ * 1. Sheet 1: Canonical 43-column maintenance inventory with wrap headers, bold quantities, and =SUM() total row.
+ * 2. Sheet 2: 'GST BILL' (Page 1) with direct formula links to inventory totals and page sum.
+ * 3. Sheet 3: 'GST BILL 2' (Page 2) with Page 1 carry forward, Page 2 items, Net Total, GST 18%, Grand Total, and Certificates.
  */
 export function exportDualSheetLocationExcel(workbook: LocationWorkbook): string {
   const wb = XLSX.utils.book_new();
 
   const inventorySheetDef = workbook.sheets['inventory'] || workbook.sheets['Performas'];
   const performas = inventorySheetDef?.performas || [];
+  
+  // Sheet 1: inventory (name matches locationName e.g. 'GIDC' or 'inventory')
   const wsInventory = buildDolvanSheet1Worksheet(performas, workbook.locationId);
-  XLSX.utils.book_append_sheet(wb, wsInventory, 'inventory');
+  const invSheetName = (workbook.locationName || 'inventory').slice(0, 31);
+  XLSX.utils.book_append_sheet(wb, wsInventory, invSheetName);
 
-  // Sheet 2: bill - auto-synced with all material added in inventory
-  const existingBill = workbook.sheets['bill']?.billData;
-  const syncedBill = syncBillFromInventory(performas, workbook.locationName, existingBill, workbook.locationId);
-  const wsBill = buildBillWorksheet(syncedBill);
-  XLSX.utils.book_append_sheet(wb, wsBill, 'bill');
+  // Compute authentic DGVCL billing model
+  const tenderTarget = workbook.tenderTargetAmount || getTenderTargetForLocation(workbook.locationId);
+  const tenderPercent = workbook.tenderPercentage || getTenderPercentForLocation(workbook.locationId);
+  const calcResult = calculateDgvclBillFromInventory(performas, workbook.locationName, {
+    tenderTargetAmount: tenderTarget,
+    tenderPercentage: tenderPercent,
+    billNumber: workbook.sheets['bill']?.billData?.billNumber,
+    billDate: workbook.sheets['bill']?.billData?.billDate,
+    contractorName: workbook.sheets['bill']?.billData?.contractorName,
+    workOrderRef: workbook.sheets['bill']?.billData?.workOrderRef
+  });
+
+  const lastInventoryRow = 4 + performas.length; // Row index of TOTAL row in Sheet 1
+
+  // Sheet 2: GST BILL (Page 1)
+  const wsGstBill = buildGstBillWorksheet(calcResult, invSheetName, lastInventoryRow);
+  XLSX.utils.book_append_sheet(wb, wsGstBill, 'GST BILL');
+
+  // Sheet 3: GST BILL 2 (Page 2)
+  const wsGstBill2 = buildGstBill2Worksheet(calcResult, invSheetName, lastInventoryRow);
+  XLSX.utils.book_append_sheet(wb, wsGstBill2, 'GST BILL 2');
 
   const cleanLoc = (workbook.locationName || 'LOCATION').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
   const fileName = `${cleanLoc}.xlsx`;
@@ -834,15 +1128,25 @@ export function exportDolvanReferenceExcel(
 ): string {
   const wb = XLSX.utils.book_new();
   const wsSheet1 = buildDolvanSheet1Worksheet(performas, locationId);
-  XLSX.utils.book_append_sheet(wb, wsSheet1, 'Sheet1');
+  const cleanLoc = (locationName || 'DOLVAN').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
+  XLSX.utils.book_append_sheet(wb, wsSheet1, cleanLoc.slice(0, 31));
 
   if (mode === 'full_workbook') {
-    const syncedBill = syncBillFromInventory(performas, locationName, undefined, locationId);
-    const wsBill = buildBillWorksheet(syncedBill);
-    XLSX.utils.book_append_sheet(wb, wsBill, 'bill');
+    const tenderTarget = locationId ? getTenderTargetForLocation(locationId) : 2000000;
+    const tenderPercent = locationId ? getTenderPercentForLocation(locationId) : 20;
+    const calcResult = calculateDgvclBillFromInventory(performas, locationName, {
+      tenderTargetAmount: tenderTarget,
+      tenderPercentage: tenderPercent
+    });
+    const lastInventoryRow = 4 + performas.length;
+
+    const wsGstBill = buildGstBillWorksheet(calcResult, cleanLoc.slice(0, 31), lastInventoryRow);
+    XLSX.utils.book_append_sheet(wb, wsGstBill, 'GST BILL');
+
+    const wsGstBill2 = buildGstBill2Worksheet(calcResult, cleanLoc.slice(0, 31), lastInventoryRow);
+    XLSX.utils.book_append_sheet(wb, wsGstBill2, 'GST BILL 2');
   }
 
-  const cleanLoc = (locationName || 'DOLVAN').replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
   const fileName = `${cleanLoc}_INVENTERY_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(wb, fileName);
   return fileName;

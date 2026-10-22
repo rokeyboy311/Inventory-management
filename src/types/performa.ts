@@ -71,6 +71,14 @@ export interface BillSheetDefinition {
   subTotal: number;
   taxGst: number;
   grandTotal: number;
+  // Authentic DGVCL tender budget tracking & schedule details
+  tenderTargetAmount?: number; // e.g. 2000000 (20 Lakhs)
+  tenderPercentage?: number;   // e.g. 20 (Above 20%)
+  page1Total?: number;
+  workDoneTotalA?: number;
+  aboveTenderAmount?: number;
+  netTotal?: number;
+  roundOff?: number;
 }
 
 export interface SheetDefinition {
@@ -91,6 +99,8 @@ export interface LocationWorkbook {
   sheets: Record<string, SheetDefinition>;
   customItems?: any[];
   lastModified: string;
+  tenderTargetAmount?: number; // Target tender goal e.g. 20,00,000
+  tenderPercentage?: number;   // Tender percentage above/below e.g. 20%
 }
 
 export interface ColumnMappingConfig {

@@ -13,7 +13,8 @@ import {
   MapPin,
   RefreshCw,
   FileCheck,
-  Sliders
+  Sliders,
+  Target
 } from 'lucide-react';
 import { LocationWorkbook } from '../../types/performa';
 import { exportDualSheetLocationExcel } from '../../utils/dolvanTemplate';
@@ -326,6 +327,33 @@ export function UserDashboard({
                         </strong>
                       </div>
                     </div>
+
+                    {/* Tender Budget Target Goal Progress */}
+                    {(() => {
+                      const tenderTarget = wb.tenderTargetAmount || 2000000;
+                      const targetAchieved = grandTotal >= tenderTarget;
+                      const pct = tenderTarget > 0 ? Math.round((grandTotal / tenderTarget) * 100) : 100;
+                      return (
+                        <div className={`p-2 rounded-xl border text-[11px] flex items-center justify-between transition-colors ${
+                          targetAchieved 
+                            ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' 
+                            : 'bg-slate-950/70 border-slate-800 text-slate-300'
+                        }`}>
+                          <div className="flex items-center gap-1.5">
+                            <Target className={`w-3.5 h-3.5 ${targetAchieved ? 'text-emerald-400 animate-pulse' : 'text-blue-400'}`} />
+                            <span className="font-semibold">Tender Target:</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-white">₹{grandTotal.toLocaleString()}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold ${
+                              targetAchieved ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                            }`}>
+                              {pct}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-500 pt-1">
                       <Clock className="w-3 h-3" />

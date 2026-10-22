@@ -25,7 +25,8 @@ import {
   Download,
   Shield,
   Users,
-  Database
+  Database,
+  Target
 } from 'lucide-react';
 
 import { 
@@ -87,6 +88,7 @@ import { ItemsSettingsModal } from './components/ItemsSettingsModal';
 import { SupabaseSyncBanner } from './components/SupabaseSyncBanner';
 import { subscribeToDatabaseChanges, isSupabaseConnected, getSupabaseSyncStatus } from './utils/supabaseClient';
 import { syncBillFromInventory } from './utils/billSync';
+import { calculateDgvclBillFromInventory, getTenderTargetForLocation } from './utils/dgvclBillEngine';
 import { RefreshCw, Sliders } from 'lucide-react';
 
 export function App() {
@@ -726,6 +728,38 @@ export function App() {
           </button>
         </div>
 
+        {/* Live Tender Budget Goal Tracker Badge */}
+        {(() => {
+          const tenderTarget = activeWorkbook?.tenderTargetAmount || (activeWorkbook?.locationId ? getTenderTargetForLocation(activeWorkbook.locationId) : 2000000);
+          const tenderPercent = activeWorkbook?.tenderPercentage || 20;
+          const calc = calculateDgvclBillFromInventory(activePerformas, activeWorkbook?.locationName || 'Location', {
+            tenderTargetAmount: tenderTarget,
+            tenderPercentage: tenderPercent
+          });
+          const isReached = calc.tenderTargetAchieved;
+          return (
+            <div 
+              onClick={() => setActiveSheetName('bill')}
+              className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                isReached 
+                  ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900/80 shadow-sm'
+                  : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-600'
+              }`}
+              title="Click to view detailed DGVCL GST Bill & Tender Target Tracker"
+            >
+              <Target className={`w-3.5 h-3.5 ${isReached ? 'text-emerald-400 animate-pulse' : 'text-blue-400'}`} />
+              <span className="font-semibold">Tender:</span>
+              <span className="font-mono font-bold text-white">₹{calc.grandTotal.toLocaleString()}</span>
+              <span className="text-[10px] text-slate-400">/ ₹{(tenderTarget / 100000).toFixed(0)}L</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
+                isReached ? 'bg-emerald-500/30 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+              }`}>
+                {calc.progressPercent}%
+              </span>
+            </div>
+          );
+        })()}
+
         {/* Right: Actions */}
         <div className="flex items-center space-x-2">
           {/* Live Cloud Status */}
@@ -823,11 +857,17 @@ export function App() {
           <BillSheetViewer
             billData={activeWorkbook?.sheets['bill']?.billData || createDefaultBillSheet(activeWorkbook?.locationName || 'Location')}
             locationName={activeWorkbook?.locationName || 'Location'}
+            locationId={activeWorkbook?.locationId}
             performas={activePerformas}
             onUpdateBill={handleUpdateBillSheet}
             onSwitchToInventory={() => {
               setActiveSheetName('inventory');
               setMainViewTab('form');
+            }}
+            onExportExcel={() => {
+              if (activeWorkbook) {
+                exportDualSheetLocationExcel(activeWorkbook);
+              }
             }}
           />
         ) : (
