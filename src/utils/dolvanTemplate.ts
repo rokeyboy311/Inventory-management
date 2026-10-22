@@ -27,7 +27,7 @@ export const DOLVAN_SHEET1_COLUMNS: DolvanColumnDef[] = [
   // 0 to 5: Main TC Identifiers
   { key: 'srNo', header1: 'SR NO', header2: '', header3: '', width: 5.5 },
   { key: 'date', header1: 'DATE', header2: '', header3: '', width: 11 },
-  { key: 'location', header1: 'Location of TC', header2: '', header3: '', width: 28 },
+  { key: 'location', header1: 'Location of TC', header2: '', header3: '', width: 34 },
   { key: 'serialNo', header1: 'TC Serial Number.', header2: '', header3: '', width: 14 },
   { key: 'make', header1: 'TC Make', header2: '', header3: '', width: 10 },
   { key: 'capacity', header1: 'TC Capacity', header2: '', header3: '', width: 9 },
@@ -42,7 +42,7 @@ export const DOLVAN_SHEET1_COLUMNS: DolvanColumnDef[] = [
   { key: 'alPatta500', header1: 'Providing LT side AL. Patta KVA', header2: '', header3: '500', width: 5.5 },
 
   // 11: Earth Connection - Sr No. 3
-  { key: 'earthConnection', header1: 'Check and Tight Earth Connection', header2: '3', header3: '', width: 6.5 },
+  { key: 'earthConnection', header1: 'Check and Tight Earth Connection', header2: '3', header3: '', width: 7.5 },
 
   // 12 to 14: LT Damaged Cable - Sr No. 4
   { key: 'ltCableNos', header1: 'Replacement of LT damaged cable', header2: '4', header3: 'Nos.', width: 5.5 },
@@ -50,7 +50,7 @@ export const DOLVAN_SHEET1_COLUMNS: DolvanColumnDef[] = [
   { key: 'ltCableC2', header1: 'Replacement of LT damaged cable', header2: '', header3: 'C- 2(150)', width: 6.5 },
 
   // 15: Providing of new termination in form of RYBN core
-  { key: 'terminationRYBN', header1: 'Providing of new termination in form of R,Y,B and N core including PVC tape', header2: '', header3: '', width: 6.5 },
+  { key: 'terminationRYBN', header1: 'Providing of new termination in form of R,Y,B and N core including PVC tape', header2: '', header3: '', width: 8.0 },
 
   // 16 to 19: Termination up to sq mm cable - Sr No. 5
   { key: 'termination70', header1: 'Providing of termination up to sq mm cable', header2: '5', header3: '70', width: 5.5 },
@@ -63,11 +63,11 @@ export const DOLVAN_SHEET1_COLUMNS: DolvanColumnDef[] = [
   { key: 'oilLeakageLtr', header1: 'Check oil leakage and fill up ', header2: '', header3: 'Ltr', width: 5.5 },
 
   // 22: Replacement of deteriorated / providing LT dist Box - Sr No. 7
-  { key: 'distBox', header1: 'Replacement of detoriarated /providing LT dist. Box with new above to 100 KVA capacity ', header2: '7', header3: '', width: 6.5 },
+  { key: 'distBox', header1: 'Replacement of detoriarated /providing LT dist. Box with new above to 100 KVA capacity ', header2: '7', header3: '', width: 8.0 },
 
   // 23 & 24: KIT-KAT FUSE (100 AMP, 200 AMP)
-  { key: 'kitKet100', header1: 'KIT-KAT FUSE ', header2: '100 AMP', header3: '', width: 6.5 },
-  { key: 'kitKet200', header1: 'KIT-KAT FUSE ', header2: '200 AMP', header3: '', width: 6.5 },
+  { key: 'kitKet100', header1: 'KIT-KAT FUSE ', header2: '100 AMP', header3: '', width: 7.0 },
+  { key: 'kitKet200', header1: 'KIT-KAT FUSE ', header2: '200 AMP', header3: '', width: 7.0 },
 
   // 25 to 27: Replacement of HRC Fuse Base - Sr No. 8
   { key: 'hrcBase630', header1: 'Replacement of HRC Fuse Base', header2: '8', header3: '630', width: 5.5 },
@@ -80,13 +80,13 @@ export const DOLVAN_SHEET1_COLUMNS: DolvanColumnDef[] = [
   { key: 'hrcLink250', header1: 'Replacement of HRC Fuse Link', header2: '', header3: '250', width: 5.5 },
 
   // 31: Providing of Fuse element (D.O.) - Sr No. 10
-  { key: 'fuseElementDO', header1: 'Providing of Fuse elemant (D.O.) ', header2: '10', header3: '', width: 5.5 },
+  { key: 'fuseElementDO', header1: 'Providing of Fuse elemant (D.O.) ', header2: '10', header3: '', width: 7.5 },
 
   // 32: Providing of Sundry items (Nut, Bolt, Washer) - Sr No. 11
-  { key: 'sundryItems', header1: 'Providing of Sundry items (Nut,Bolt,Washer)', header2: '11', header3: '', width: 5.5 },
+  { key: 'sundryItems', header1: 'Providing of Sundry items (Nut,Bolt,Washer)', header2: '11', header3: '', width: 7.5 },
 
   // 33: General Condition - Sr No. 12
-  { key: 'generalCondition', header1: 'General Condition', header2: '12', header3: '', width: 5.5 },
+  { key: 'generalCondition', header1: 'General Condition', header2: '12', header3: '', width: 7.5 },
 
   // 34 to 36: LT Side Brass Nuts (12mm, 20mm, 30mm) - Sr No. 13
   { key: 'brassNut12', header1: 'LT Side Brass Nuts ', header2: '13', header3: '12 mm', width: 5.5 },
@@ -99,7 +99,7 @@ export const DOLVAN_SHEET1_COLUMNS: DolvanColumnDef[] = [
   { key: 'brassWasher30', header1: 'LT Side Brass Washer ', header2: '', header3: '30 mm', width: 5.5 },
 
   // 40: Breather 500 gm
-  { key: 'breather', header1: 'Breather ', header2: '', header3: '500 gm', width: 6.5 },
+  { key: 'breather', header1: 'Breather ', header2: '', header3: '500 gm', width: 7.5 },
 
   // 41 & 42: HALF STUD (12 MM, 20 MM)
   { key: 'halfStud12', header1: 'HALF STUD ', header2: '', header3: '12 MM', width: 5.5 },
@@ -205,7 +205,7 @@ export function getEffectiveDolvanColumns(
           header1: item.description,
           header2: item.srLabel,
           header3: sf,
-          width: 6.5,
+          width: 6.0,
           customSrLabel: item.srLabel,
           customSizeField: sf
         });
@@ -221,7 +221,7 @@ export function getEffectiveDolvanColumns(
         header1: item.description,
         header2: item.srLabel,
         header3: item.unit || '',
-        width: 6.5,
+        width: 7.5,
         customSrLabel: item.srLabel
       });
     }
@@ -425,7 +425,7 @@ export function mapPerformaToDolvanRow(
     getSizeQty('6.2', '185') || getSingleQty('6.2'),                              // 18: Termination 185
     getSizeQty('6.2', '240') || getSizeQty('6', '240'),                           // 19: Termination 240
     getSingleQty('7'),                                                            // 20: Oil leakage
-    parseVal(getRowBySr('7')?.qty),                                               // 21: Oil Ltr (blank if 0 or empty)
+    getSingleQty('7') !== '' ? (parseVal(getRowBySr('7')?.qty) !== '' ? parseVal(getRowBySr('7')?.qty) : 0) : '', // 21: Oil Ltr (0 when checked without extra liters)
     ((Number(getSingleQty('9.1')) || 0) + (Number(getSingleQty('9.2')) || 0)) || getCombinedSizesQty('9.1', ['Up to 100 Amp', 'Above 100 Amp']) || getSingleQty('9'), // 22: Dist Box
     getSizeQty('10', '100Amp'),                                                   // 23: Kit-Kat 100
     getSizeQty('10', '200Amp'),                                                   // 24: Kit-Kat 200
@@ -550,19 +550,11 @@ export function buildDolvanSheet1Worksheet(
       }
 
       if (r === 0) {
-        if (c < 6) {
-          ws[cellRef].s = {
-            font: { name: 'Arial', sz: 9, bold: true, color: { rgb: '000000' } },
-            alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
-            border: BORDER_THIN
-          };
-        } else {
-          ws[cellRef].s = {
-            font: { name: 'Arial', sz: 9, bold: true, color: { rgb: '000000' } },
-            alignment: { textRotation: 90, vertical: 'center', horizontal: 'center', wrapText: true },
-            border: BORDER_THIN
-          };
-        }
+        ws[cellRef].s = {
+          font: { name: 'Arial', sz: 8.5, bold: true, color: { rgb: '000000' } },
+          alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
+          border: BORDER_THIN
+        };
       } else if (r === 1) {
         ws[cellRef].s = {
           font: { name: 'Arial', sz: 9.5, bold: true, color: { rgb: '000000' } },
