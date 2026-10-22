@@ -301,7 +301,7 @@ export function mapPerformaToDolvanRow(performa: PerformaRecord, index: number):
     getSizeQty('4', 'C-1(70)'),                                      // 13: C- 1(70)
     getSizeQty('4', 'C-2(150)'),                                     // 14: C- 2(150)
     getSingleQty('5'),                                               // 15: Termination RYBN
-    getCombinedSizesQty('6', ['25', '50', '70']),                    // 16: Termination 70 (25/50/70)
+    getSingleQty('6') || getCombinedSizesQty('6', ['25', '50', '70']), // 16: Termination 70 (25/50/70)
     getCombinedSizesQty('6.1', ['95', '120', '150']),                // 17: Termination 150 (95/120/150)
     getSizeQty('6.2', '185') || getSingleQty('6.2'),                 // 18: Termination 185
     getSizeQty('6.2', '240') || getSizeQty('6', '240'),              // 19: Termination 240

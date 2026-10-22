@@ -201,7 +201,7 @@ export const DEFAULT_PERFORMA_ITEMS_TEMPLATE: Omit<MaintenanceItemRow, 'id'>[] =
     labourYes: false,
     qty: ''
   },
-  // 8: SR 6 — 3 Quantity Sub-Fields: 25, 50, 70
+  // 8: SR 6 — Direct Single Qty Field
   {
     srNo: 6,
     subIndex: 1,
@@ -210,9 +210,7 @@ export const DEFAULT_PERFORMA_ITEMS_TEMPLATE: Omit<MaintenanceItemRow, 'id'>[] =
     unit: 'Nos.',
     materialYes: false,
     labourYes: false,
-    qty: '',
-    sizeFields: ['25', '50', '70'],
-    sizeQtys: { '25': '', '50': '', '70': '' }
+    qty: ''
   },
   // 9: SR 6.1 — 3 Quantity Sub-Fields: 95, 120, 150
   {
@@ -456,7 +454,16 @@ export function ensureCompleteMasterItems(
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          masterTemplates = parsed;
+          masterTemplates = parsed.map((item: any) => {
+            if (
+              (item.srLabel === '6' || (item.description && item.description.toLowerCase().includes('25/50/70'))) &&
+              item.sizeFields
+            ) {
+              const { sizeFields, sizeQtys, ...rest } = item;
+              return rest;
+            }
+            return item;
+          });
         }
       }
     } catch {
@@ -521,6 +528,16 @@ export function ensureCompleteMasterItems(
         target.qty = src.qty;
         target.materialYes = true;
         target.labourYes = true;
+      } else if (src.sizeQtys && typeof src.sizeQtys === 'object') {
+        const sizeTotal = Object.values(src.sizeQtys).reduce<number>((acc, v) => {
+          const n = Number(v);
+          return !isNaN(n) ? acc + n : acc;
+        }, 0);
+        if (sizeTotal > 0) {
+          target.qty = sizeTotal;
+          target.materialYes = true;
+          target.labourYes = true;
+        }
       }
     }
   };
@@ -560,7 +577,7 @@ export function ensureCompleteMasterItems(
     } else if (sr === '5' || desc.includes('ryb and n core')) {
       applyToTarget(6, src);
     } else if (sr === '6' || desc.includes('25/50/70')) {
-      applyToTarget(7, src, '70');
+      applyToTarget(7, src);
     } else if (sr === '6.1' || desc.includes('95/120/150')) {
       applyToTarget(8, src, '150');
     } else if (sr === '6.2' || desc.includes('185 sq mm')) {

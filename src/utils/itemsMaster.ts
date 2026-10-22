@@ -67,6 +67,17 @@ export function getLocationItemsStorageKey(locationId?: string): string {
   return `dgvcl_custom_master_items_loc_${locationId}`;
 }
 
+function normalizeMasterItem(it: ItemMasterTemplate): ItemMasterTemplate {
+  if (
+    (it.srLabel === '6' || (it.description && it.description.toLowerCase().includes('25/50/70'))) &&
+    it.sizeFields
+  ) {
+    const { sizeFields, ...rest } = it;
+    return rest;
+  }
+  return it;
+}
+
 /**
  * Loads current master items for a specific location from localStorage, or initializes with defaults
  */
@@ -80,7 +91,7 @@ export function getMasterItemsList(locationId?: string): ItemMasterTemplate[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map(normalizeMasterItem);
       }
     }
 
@@ -90,7 +101,7 @@ export function getMasterItemsList(locationId?: string): ItemMasterTemplate[] {
       if (globalRaw) {
         const parsedGlobal = JSON.parse(globalRaw);
         if (Array.isArray(parsedGlobal) && parsedGlobal.length > 0) {
-          return parsedGlobal;
+          return parsedGlobal.map(normalizeMasterItem);
         }
       }
     }
