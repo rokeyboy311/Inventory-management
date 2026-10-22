@@ -307,7 +307,7 @@ export function mapPerformaToDolvanRow(performa: PerformaRecord, index: number):
     getSizeQty('6.2', '240') || getSizeQty('6', '240'),              // 19: Termination 240
     getSingleQty('7'),                                               // 20: Oil leakage
     0,                                                               // 21: Oil Ltr
-    getCombinedSizesQty('9.1', ['Up to 100 Amp', 'Above 100 Amp']) || getSingleQty('9'), // 22: Dist Box
+    ((Number(getSingleQty('9.1')) || 0) + (Number(getSingleQty('9.2')) || 0)) || getCombinedSizesQty('9.1', ['Up to 100 Amp', 'Above 100 Amp']) || getSingleQty('9'), // 22: Dist Box
     getSizeQty('10', '100Amp'),                                      // 23: Kit-Kat 100
     getSizeQty('10', '200Amp'),                                      // 24: Kit-Kat 200
     getSizeQty('11', '630 amp'),                                     // 25: HRC Base 630

@@ -29,7 +29,8 @@ const STANDARD_ITEM_RATES: Record<string, { rate: number; labourRate: number }> 
   '7': { rate: 180, labourRate: 50 },    // Oil leakage / top-up
   '8': { rate: 0, labourRate: 100 },     // Voltage/Amp measurement
   '9': { rate: 950, labourRate: 250 },   // Fixing new box
-  '9.1': { rate: 850, labourRate: 200 }, // Box 100A / Above
+  '9.1': { rate: 850, labourRate: 200 }, // Replacement of new box up to 100 Amp
+  '9.2': { rate: 950, labourRate: 250 }, // Replacement of new box above 100 Amp
   '10': { rate: 280, labourRate: 60 },   // Kit-Kat fuse
   '11': { rate: 420, labourRate: 70 },   // HRC fuse base
   '12': { rate: 260, labourRate: 50 },   // HRC fuse link
@@ -67,15 +68,44 @@ export function getLocationItemsStorageKey(locationId?: string): string {
   return `dgvcl_custom_master_items_loc_${locationId}`;
 }
 
-function normalizeMasterItem(it: ItemMasterTemplate): ItemMasterTemplate {
-  if (
-    (it.srLabel === '6' || (it.description && it.description.toLowerCase().includes('25/50/70'))) &&
-    it.sizeFields
-  ) {
-    const { sizeFields, ...rest } = it;
-    return rest;
+function expandNormalizedMasterItems(items: ItemMasterTemplate[]): ItemMasterTemplate[] {
+  const result: ItemMasterTemplate[] = [];
+  for (const it of items) {
+    if (
+      (it.srLabel === '6' || (it.description && it.description.toLowerCase().includes('25/50/70'))) &&
+      it.sizeFields
+    ) {
+      const { sizeFields, ...rest } = it;
+      result.push(rest);
+    } else if (
+      it.srLabel === '9.1' &&
+      (it.description?.includes('above') || (it.sizeFields && it.sizeFields.includes('Above 100 Amp')))
+    ) {
+      result.push({
+        id: `master-item-9-2-upTo100`,
+        srNo: 9,
+        subIndex: 2,
+        srLabel: '9.1',
+        description: 'Replacement of new box up to 100 Amp',
+        unit: 'Nos.',
+        defaultRate: 850,
+        defaultLabourRate: 200
+      });
+      result.push({
+        id: `master-item-9-3-above100`,
+        srNo: 9,
+        subIndex: 3,
+        srLabel: '9.2',
+        description: 'Replacement of new box above 100 Amp',
+        unit: 'Nos.',
+        defaultRate: 950,
+        defaultLabourRate: 250
+      });
+    } else {
+      result.push(it);
+    }
   }
-  return it;
+  return result;
 }
 
 /**
@@ -91,7 +121,7 @@ export function getMasterItemsList(locationId?: string): ItemMasterTemplate[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(normalizeMasterItem);
+        return expandNormalizedMasterItems(parsed);
       }
     }
 
@@ -101,7 +131,7 @@ export function getMasterItemsList(locationId?: string): ItemMasterTemplate[] {
       if (globalRaw) {
         const parsedGlobal = JSON.parse(globalRaw);
         if (Array.isArray(parsedGlobal) && parsedGlobal.length > 0) {
-          return parsedGlobal.map(normalizeMasterItem);
+          return expandNormalizedMasterItems(parsedGlobal);
         }
       }
     }

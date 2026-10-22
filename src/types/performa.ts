@@ -271,18 +271,27 @@ export const DEFAULT_PERFORMA_ITEMS_TEMPLATE: Omit<MaintenanceItemRow, 'id'>[] =
     labourYes: false,
     qty: ''
   },
-  // 14: SR 9.1 (Consolidated from 9.1 & 9.2) — 2 Quantity Sub-Fields: Up to 100 Amp, Above 100 Amp
+  // 14: SR 9.1 — Replacement of new box up to 100 Amp
   {
     srNo: 9,
     subIndex: 2,
     srLabel: '9.1',
-    description: 'Replacement of new box up to / above 100 Amp',
+    description: 'Replacement of new box up to 100 Amp',
     unit: 'Nos.',
     materialYes: false,
     labourYes: false,
-    qty: '',
-    sizeFields: ['Up to 100 Amp', 'Above 100 Amp'],
-    sizeQtys: { 'Up to 100 Amp': '', 'Above 100 Amp': '' }
+    qty: ''
+  },
+  // 15: SR 9.2 — Replacement of new box above 100 Amp
+  {
+    srNo: 9,
+    subIndex: 3,
+    srLabel: '9.2',
+    description: 'Replacement of new box above 100 Amp',
+    unit: 'Nos.',
+    materialYes: false,
+    labourYes: false,
+    qty: ''
   },
   // 15: SR 10 (Consolidated from 10 & 10.1) — 2 Quantity Sub-Fields: 100Amp, 200Amp
   {
@@ -454,16 +463,43 @@ export function ensureCompleteMasterItems(
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          masterTemplates = parsed.map((item: any) => {
+          const expanded: any[] = [];
+          for (const item of parsed) {
             if (
               (item.srLabel === '6' || (item.description && item.description.toLowerCase().includes('25/50/70'))) &&
               item.sizeFields
             ) {
               const { sizeFields, sizeQtys, ...rest } = item;
-              return rest;
+              expanded.push(rest);
+            } else if (
+              item.srLabel === '9.1' &&
+              (item.description?.includes('above') || (item.sizeFields && item.sizeFields.includes('Above 100 Amp')))
+            ) {
+              expanded.push({
+                srNo: 9,
+                subIndex: 2,
+                srLabel: '9.1',
+                description: 'Replacement of new box up to 100 Amp',
+                unit: 'Nos.',
+                materialYes: false,
+                labourYes: false,
+                qty: ''
+              });
+              expanded.push({
+                srNo: 9,
+                subIndex: 3,
+                srLabel: '9.2',
+                description: 'Replacement of new box above 100 Amp',
+                unit: 'Nos.',
+                materialYes: false,
+                labourYes: false,
+                qty: ''
+              });
+            } else {
+              expanded.push(item);
             }
-            return item;
-          });
+          }
+          masterTemplates = expanded;
         }
       }
     } catch {
@@ -557,91 +593,96 @@ export function ensureCompleteMasterItems(
     }
   }
 
+  const getIdxBySr = (label: string): number => result.findIndex(r => r.srLabel === label);
+
   for (const src of existingItems) {
     if (!src) continue;
     const sr = (src.srLabel || '').trim();
     const desc = (src.description || '').toLowerCase();
 
     if (sr === '1' || desc.includes('lt bushing')) {
-      applyToTarget(0, src);
+      applyToTarget(getIdxBySr('1'), src);
     } else if (sr === '1.1' || desc.includes('ht bushing')) {
-      applyToTarget(1, src);
+      applyToTarget(getIdxBySr('1.1'), src);
     } else if (sr === '2' || desc.includes('half stud')) {
-      applyToTarget(2, src);
+      applyToTarget(getIdxBySr('2'), src);
     } else if (sr === '2.1' || desc.includes('al. patta') || desc.includes('al patta')) {
-      applyToTarget(3, src);
+      applyToTarget(getIdxBySr('2.1'), src);
     } else if (sr === '3' || desc.includes('earth connection')) {
-      applyToTarget(4, src);
+      applyToTarget(getIdxBySr('3'), src);
     } else if (sr === '4' || desc.includes('damage lt cable')) {
-      applyToTarget(5, src, 'Nos.');
+      applyToTarget(getIdxBySr('4'), src, 'Nos.');
     } else if (sr === '5' || desc.includes('ryb and n core')) {
-      applyToTarget(6, src);
+      applyToTarget(getIdxBySr('5'), src);
     } else if (sr === '6' || desc.includes('25/50/70')) {
-      applyToTarget(7, src);
+      applyToTarget(getIdxBySr('6'), src);
     } else if (sr === '6.1' || desc.includes('95/120/150')) {
-      applyToTarget(8, src, '150');
+      applyToTarget(getIdxBySr('6.1'), src, '150');
     } else if (sr === '6.2' || desc.includes('185 sq mm')) {
-      applyToTarget(9, src, '185');
+      applyToTarget(getIdxBySr('6.2'), src, '185');
     } else if (sr === '7' || desc.includes('oil leakage')) {
-      applyToTarget(10, src);
+      applyToTarget(getIdxBySr('7'), src);
     } else if (sr === '8' || desc.includes('measurement of voltage')) {
-      applyToTarget(11, src);
-    } else if (sr === '9' || desc.includes('fixing new box')) {
-      applyToTarget(12, src);
-    } else if (sr === '9.1' || desc.includes('new box')) {
-      if (desc.includes('above 100') || sr === '9.2') {
-        applyToTarget(13, src, 'Above 100 Amp');
-      } else {
-        applyToTarget(13, src, 'Up to 100 Amp');
+      applyToTarget(getIdxBySr('8'), src);
+    } else if (sr === '9' || (desc.includes('fixing new box') && !desc.includes('replacement'))) {
+      applyToTarget(getIdxBySr('9'), src);
+    } else if (sr === '9.2' || desc.includes('above 100')) {
+      applyToTarget(getIdxBySr('9.2'), src);
+    } else if (sr === '9.1' || desc.includes('up to 100') || desc.includes('new box')) {
+      if (src.sizeQtys && isNonZeroQtyValue(src.sizeQtys['Above 100 Amp'])) {
+        applyToTarget(getIdxBySr('9.2'), { ...src, qty: src.sizeQtys['Above 100 Amp'] });
       }
-    } else if (sr === '9.2') {
-      applyToTarget(13, src, 'Above 100 Amp');
+      if (src.sizeQtys && isNonZeroQtyValue(src.sizeQtys['Up to 100 Amp'])) {
+        applyToTarget(getIdxBySr('9.1'), { ...src, qty: src.sizeQtys['Up to 100 Amp'] });
+      } else if (!src.sizeQtys) {
+        applyToTarget(getIdxBySr('9.1'), src);
+      }
     } else if (sr === '10' || sr === '10.1' || desc.includes('kit-kat') || desc.includes('kit-ket')) {
       if (sr === '10.1' || (desc.includes('200amp') && !desc.includes('100amp'))) {
-        applyToTarget(14, src, '200Amp');
+        applyToTarget(getIdxBySr('10'), src, '200Amp');
       } else {
-        applyToTarget(14, src, '100Amp');
+        applyToTarget(getIdxBySr('10'), src, '100Amp');
       }
     } else if (sr === '11' || sr === '11.1' || sr === '11.2' || desc.includes('hrc fuse base')) {
       if (sr === '11.1' || (desc.includes('400') && !desc.includes('630'))) {
-        applyToTarget(15, src, '400 amp');
+        applyToTarget(getIdxBySr('11'), src, '400 amp');
       } else if (sr === '11.2' || (desc.includes('250') && !desc.includes('630'))) {
-        applyToTarget(15, src, '250 amp');
+        applyToTarget(getIdxBySr('11'), src, '250 amp');
       } else {
-        applyToTarget(15, src, '630 amp');
+        applyToTarget(getIdxBySr('11'), src, '630 amp');
       }
     } else if (sr === '12' || sr === '12.1' || sr === '12.2' || desc.includes('hrc fuse link')) {
       if (sr === '12.1' || (desc.includes('400') && !desc.includes('630'))) {
-        applyToTarget(16, src, '400 amp');
+        applyToTarget(getIdxBySr('12'), src, '400 amp');
       } else if (sr === '12.2' || (desc.includes('250') && !desc.includes('630'))) {
-        applyToTarget(16, src, '250 amp');
+        applyToTarget(getIdxBySr('12'), src, '250 amp');
       } else {
-        applyToTarget(16, src, '630 amp');
+        applyToTarget(getIdxBySr('12'), src, '630 amp');
       }
     } else if (sr === '13' || desc.includes('fuse element')) {
-      applyToTarget(17, src);
+      applyToTarget(getIdxBySr('13'), src);
     } else if (sr === '14' || desc.includes('sundry items')) {
-      applyToTarget(18, src);
+      applyToTarget(getIdxBySr('14'), src);
     } else if (sr === '15' || desc.includes('general condition')) {
-      applyToTarget(19, src);
+      applyToTarget(getIdxBySr('15'), src);
     } else if (sr === '16' || sr === '16.1' || sr === '16.2' || desc.includes('brass nut')) {
       if (sr === '16.1' || (desc.includes('20mm') && !desc.includes('12mm'))) {
-        applyToTarget(20, src, '20MM');
+        applyToTarget(getIdxBySr('16'), src, '20MM');
       } else if (sr === '16.2' || (desc.includes('30mm') && !desc.includes('12mm'))) {
-        applyToTarget(20, src, '30MM');
+        applyToTarget(getIdxBySr('16'), src, '30MM');
       } else {
-        applyToTarget(20, src, '12MM');
+        applyToTarget(getIdxBySr('16'), src, '12MM');
       }
     } else if (sr === '17' || sr === '17.1' || sr === '17.2' || desc.includes('brass washer')) {
       if (sr === '17.1' || (desc.includes('20mm') && !desc.includes('12mm'))) {
-        applyToTarget(21, src, '20MM');
+        applyToTarget(getIdxBySr('17'), src, '20MM');
       } else if (sr === '17.2' || (desc.includes('30mm') && !desc.includes('12mm'))) {
-        applyToTarget(21, src, '30MM');
+        applyToTarget(getIdxBySr('17'), src, '30MM');
       } else {
-        applyToTarget(21, src, '12MM');
+        applyToTarget(getIdxBySr('17'), src, '12MM');
       }
     } else if (sr === '18' || desc.includes('breather')) {
-      applyToTarget(22, src);
+      applyToTarget(getIdxBySr('18'), src);
     }
   }
 

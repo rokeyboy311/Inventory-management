@@ -314,7 +314,7 @@ export const A4PerformaDocument: React.FC<A4PerformaDocumentProps> = ({
         const isActive = item.materialYes || item.labourYes || hasRowAnyQty(item);
         if (!isActive) return;
       } else if (rowFilterMode === 'common') {
-        const commonSrLabels = new Set(['1', '1.1', '2', '2.1', '3', '4', '5', '6', '6.1', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17']);
+        const commonSrLabels = new Set(['1', '1.1', '2', '2.1', '3', '4', '5', '6', '6.1', '6.2', '7', '8', '9', '9.1', '9.2', '10', '11', '12', '13', '14', '15', '16', '17', '18']);
         if (!commonSrLabels.has(item.srLabel || String(item.srNo))) return;
       }
       indices.push(idx);
