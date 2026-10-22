@@ -20,6 +20,7 @@ interface ExportReferenceModalProps {
   performas: PerformaRecord[];
   locationName: string;
   workbookName: string;
+  locationId?: string;
   onExportSuccess?: (fileName: string) => void;
 }
 
@@ -29,6 +30,7 @@ export const ExportReferenceModal: React.FC<ExportReferenceModalProps> = ({
   performas,
   locationName,
   workbookName,
+  locationId,
   onExportSuccess
 }) => {
   const [exportMode, setExportMode] = useState<'sheet1_only' | 'full_workbook'>('sheet1_only');
@@ -39,7 +41,7 @@ export const ExportReferenceModal: React.FC<ExportReferenceModalProps> = ({
   const handleExecuteExport = () => {
     setIsExporting(true);
     try {
-      const fileName = exportDolvanReferenceExcel(performas, locationName || 'DOLVAN', exportMode);
+      const fileName = exportDolvanReferenceExcel(performas, locationName || 'DOLVAN', exportMode, locationId);
       if (onExportSuccess) {
         onExportSuccess(fileName);
       }

@@ -686,6 +686,23 @@ export function ensureCompleteMasterItems(
     }
   }
 
+  // Preserve any custom items from existingItems that are not in the template
+  for (const src of existingItems) {
+    if (!src) continue;
+    const sLabel = (src.srLabel || '').trim();
+    const sDesc = (src.description || '').trim().toLowerCase();
+    const alreadyInResult = result.some(r => 
+      (sLabel && r.srLabel && r.srLabel.trim() === sLabel) ||
+      (sDesc && r.description && r.description.trim().toLowerCase() === sDesc)
+    );
+    if (!alreadyInResult) {
+      result.push({
+        ...src,
+        id: src.id || `custom-item-${sLabel || Date.now()}`
+      });
+    }
+  }
+
   return result;
 }
 
