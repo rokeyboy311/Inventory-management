@@ -161,11 +161,17 @@ export function App() {
 
   // Active workbook helper
   const activeWorkbook = workbooks.find(w => w.locationId === activeLocationId) || (workbooks.length > 0 ? workbooks[0] : null);
+  const inventorySheetKey = (activeWorkbook?.sheets && 'inventory' in activeWorkbook.sheets)
+    ? 'inventory'
+    : (activeWorkbook?.sheets && 'Performas' in activeWorkbook.sheets ? 'Performas' : 'inventory');
+  const inventorySheet = activeWorkbook?.sheets ? activeWorkbook.sheets[inventorySheetKey] : undefined;
+  // activePerformas ALWAYS reflects all maintenance records entered for this location!
+  const activePerformas: PerformaRecord[] = inventorySheet?.performas || [];
+
   const effectiveSheetName = (activeWorkbook?.sheets && activeSheetName in activeWorkbook.sheets)
     ? activeSheetName
-    : (activeWorkbook?.sheets && 'inventory' in activeWorkbook.sheets ? 'inventory' : Object.keys(activeWorkbook?.sheets || {})[0] || 'inventory');
+    : inventorySheetKey;
   const activeSheet = activeWorkbook?.sheets ? activeWorkbook.sheets[effectiveSheetName] : undefined;
-  const activePerformas: PerformaRecord[] = activeSheet?.performas || [];
 
   // Show notification banner helper
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -364,14 +370,16 @@ export function App() {
     const existingBillData = activeWorkbook.sheets['bill']?.billData;
     const syncedBill = syncBillFromInventory(sortedPerformas, activeWorkbook.locationName, existingBillData, activeWorkbook.locationId);
 
-    // Update workbook
+    // Update workbook: always persist performas to the canonical inventory sheet and refresh bill sheet
     const updatedSheets = {
       ...activeWorkbook.sheets,
-      [effectiveSheetName]: {
-        ...activeSheet,
-        name: activeSheet.name || effectiveSheetName,
+      [inventorySheetKey]: {
+        ...(activeWorkbook.sheets[inventorySheetKey] || {}),
+        name: inventorySheetKey,
+        type: 'inventory' as const,
         performas: sortedPerformas,
-        rawRowsCount: sortedPerformas.length
+        rawRowsCount: sortedPerformas.length,
+        isCompatible: true
       },
       'bill': {
         name: 'bill',
@@ -497,11 +505,13 @@ export function App() {
       ...activeWorkbook,
       sheets: {
         ...activeWorkbook.sheets,
-        [effectiveSheetName]: {
-          ...activeSheet,
-          name: activeSheet.name || effectiveSheetName,
+        [inventorySheetKey]: {
+          ...(activeWorkbook.sheets[inventorySheetKey] || {}),
+          name: inventorySheetKey,
+          type: 'inventory' as const,
           performas: filtered,
-          rawRowsCount: filtered.length
+          rawRowsCount: filtered.length,
+          isCompatible: true
         },
         'bill': {
           name: 'bill',

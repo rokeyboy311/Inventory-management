@@ -556,120 +556,111 @@ export function extractInventoryColumnQuantities(performas: PerformaRecord[]): R
       const desc = (it.description || '').toLowerCase();
       const sq = it.sizeQtys || {};
 
-      // Bushing Goti
+      // 1: Bushing goti
       if (label === '1.1' || desc.includes('ht bushing')) {
-        const val = getNum(it.qty);
-        totals.COL_G += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
+        totals.COL_G += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
       } else if (label === '1' || desc.includes('lt bushing')) {
-        const val = getNum(it.qty);
-        totals.COL_H += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
+        totals.COL_H += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
       }
-      // AL Patta
-      else if (label === '3' || desc.includes('al. patta') || desc.includes('al patta')) {
-        totals.COL_I += getNum(sq['100']);
-        totals.COL_J += getNum(sq['200']);
-        totals.COL_K += getNum(sq['500']);
-        if (!sq['100'] && !sq['200'] && !sq['500']) {
-          const val = getNum(it.qty);
-          totals.COL_I += val;
-        }
+      // 2: Half stud (AP: 12mm, AQ: 20mm)
+      else if (label === '2' && !label.includes('.')) {
+        const v12 = getNum(sq['12MM']) || getNum(sq['12 mm']);
+        const v20 = getNum(sq['20MM']) || getNum(sq['20 mm']);
+        totals.COL_AP += v12;
+        totals.COL_AQ += v20 || (v12 === 0 ? (getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0)) : 0);
       }
-      // Earth connection
-      else if (label === '4' || desc.includes('earth connection')) {
-        const val = getNum(it.qty);
-        totals.COL_L += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
+      // 2.1: AL Patta (I: 100, J: 200, K: 500)
+      else if (label === '2.1' || desc.includes('al. patta') || desc.includes('al patta')) {
+        const v100 = getNum(sq['100']);
+        const v500 = getNum(sq['500']);
+        const v200 = getNum(sq['200']) || (v100 === 0 && v500 === 0 ? (getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0)) : 0);
+        totals.COL_I += v100;
+        totals.COL_J += v200;
+        totals.COL_K += v500;
       }
-      // Replacement LT Cable
-      else if (label === '5' || (desc.includes('cable') && desc.includes('replacement'))) {
-        const val = getNum(it.qty);
-        totals.COL_M += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
-        totals.COL_N += getNum(sq['C- 1(70)']);
-        totals.COL_O += getNum(sq['C- 2(150)']);
+      // 3: Earth Connection
+      else if (label === '3' || desc.includes('earth connection')) {
+        totals.COL_L += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
       }
-      // Termination RYBN & Cable Terminations
-      else if (label === '6' || desc.includes('termination')) {
-        const val = getNum(it.qty);
-        totals.COL_P += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
-        totals.COL_Q += getNum(sq['70']) || getNum(sq['25/50/70 Sq mm']) || getNum(sq['25/50/70']);
-        totals.COL_R += getNum(sq['150']) || getNum(sq['95/120/150 Sq mm']) || getNum(sq['95/120/150']);
-        totals.COL_S += getNum(sq['185']) || getNum(sq['185 Sq mm']);
-        totals.COL_T += getNum(sq['240']) || getNum(sq['240 Sq mm']);
+      // 4: LT Cable (M: Nos, N: 70, O: 150)
+      else if (label === '4' || (desc.includes('cable') && (desc.includes('damage') || desc.includes('replacement')))) {
+        totals.COL_M += getNum(sq['Nos.']) || getNum(sq['nos']) || getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
+        totals.COL_N += getNum(sq['C-1(70)']) || getNum(sq['C- 1(70)']) || getNum(sq['70']);
+        totals.COL_O += getNum(sq['C-2(150)']) || getNum(sq['C- 2(150)']) || getNum(sq['150']);
       }
-      // Oil leakage & top up
-      else if (label === '8' || desc.includes('oil leakage') || desc.includes('topping of oil')) {
-        const val = getNum(it.qty);
-        totals.COL_U += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
+      // 5: Termination RYBN
+      else if (label === '5' || desc.includes('ryb and n core') || desc.includes('r,y,b') || desc.includes('rybn')) {
+        totals.COL_P += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
+      }
+      // 6: Termination 25/50/70
+      else if (label === '6' && !label.includes('.')) {
+        totals.COL_Q += getNum(it.qty) || getNum(sq['70']) || getNum(sq['25/50/70']) || (it.materialYes || it.labourYes ? 1 : 0);
+      }
+      // 6.1: Termination 95/120/150
+      else if (label === '6.1' || desc.includes('95/120/150')) {
+        totals.COL_R += getNum(sq['150']) || getNum(sq['120']) || getNum(sq['95']) || getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
+      }
+      // 6.2: Termination 185
+      else if (label === '6.2' || (desc.includes('185') && desc.includes('termination'))) {
+        totals.COL_S += getNum(sq['185']) || getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
+      }
+      // 6.3: Termination 240
+      else if (label === '6.3' || (desc.includes('240') && desc.includes('termination'))) {
+        totals.COL_T += getNum(sq['240']) || getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
+      }
+      // 7: Oil leakage
+      else if (label === '7' || desc.includes('oil leakage') || desc.includes('topping of oil')) {
+        totals.COL_U += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
         totals.COL_V += getNum(sq['Ltr']) || getNum(sq['ltr']);
       }
-      // Dist Box
-      else if (label === '9' || desc.includes('dist. box') || desc.includes('dist box')) {
-        const above100 = getNum(sq['above 100 Amp']) || getNum(sq['above 100']) || getNum(sq['Replacement of new box above 100 Amp']);
-        totals.COL_W += above100 > 0 ? above100 : (getNum(it.qty) > 0 ? getNum(it.qty) : (it.materialYes || it.labourYes ? 1 : 0));
+      // 9.2: Dist Box Above 100
+      else if (label === '9.2' || desc.includes('box above 100') || (desc.includes('dist') && desc.includes('box') && desc.includes('above'))) {
+        totals.COL_W += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
       }
-      // Kit-Kat Fuse
+      // 10: Kit-Kat (X: 100, Y: 200)
       else if (label === '10' || desc.includes('kit-kat') || desc.includes('kit-ket')) {
-        totals.COL_X += getNum(sq['100 Amp']) || getNum(sq['100']);
-        totals.COL_Y += getNum(sq['200 Amp']) || getNum(sq['200']);
+        totals.COL_X += getNum(sq['100Amp']) || getNum(sq['100']);
+        totals.COL_Y += getNum(sq['200Amp']) || getNum(sq['200']);
       }
-      // HRC Fuse Base
-      else if (label === '11' || desc.includes('hrc fuse base') || desc.includes('fuse base')) {
-        totals.COL_Z += getNum(sq['630 Amp']) || getNum(sq['630']);
-        totals.COL_AA += getNum(sq['400 Amp']) || getNum(sq['400']);
-        totals.COL_AB += getNum(sq['250 Amp']) || getNum(sq['250']);
+      // 11: HRC Base (Z: 630, AA: 400, AB: 250)
+      else if (label === '11' || desc.includes('hrc fuse base') || (desc.includes('fuse base') && !desc.includes('link'))) {
+        totals.COL_Z += getNum(sq['630 amp']) || getNum(sq['630']);
+        totals.COL_AA += getNum(sq['400 amp']) || getNum(sq['400']);
+        totals.COL_AB += getNum(sq['250 amp']) || getNum(sq['250']);
       }
-      // HRC Fuse Link
-      else if (label === '12' || desc.includes('hrc fuse link') || desc.includes('fuse link') || desc.includes('hrc fuse bridge')) {
-        totals.COL_AC += getNum(sq['630 Amp']) || getNum(sq['630']);
-        totals.COL_AD += getNum(sq['400 Amp']) || getNum(sq['400']);
-        totals.COL_AE += getNum(sq['250 Amp']) || getNum(sq['250']);
+      // 12: HRC Link (AC: 630, AD: 400, AE: 250)
+      else if (label === '12' || desc.includes('hrc fuse link') || desc.includes('fuse link') || desc.includes('fuse bridge')) {
+        totals.COL_AC += getNum(sq['630 amp']) || getNum(sq['630']);
+        totals.COL_AD += getNum(sq['400 amp']) || getNum(sq['400']);
+        totals.COL_AE += getNum(sq['250 amp']) || getNum(sq['250']);
       }
-      // Fuse Element DO
-      else if (label === '13' || desc.includes('fuse element') || desc.includes('d.o. fuse')) {
-        const val = getNum(it.qty);
-        totals.COL_AF += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
+      // 13: Fuse element DO
+      else if (label === '13' || desc.includes('fuse element') || desc.includes('d.o fuse') || desc.includes('d.o.')) {
+        totals.COL_AF += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
       }
-      // Sundry items
+      // 14: Sundry items
       else if (label === '14' || desc.includes('sundry')) {
-        const val = getNum(it.qty);
-        totals.COL_AG += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
+        totals.COL_AG += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
       }
-      // General condition
+      // 15: General condition
       else if (label === '15' || desc.includes('general condition')) {
-        const val = getNum(it.qty);
-        totals.COL_AH += val > 0 ? val : (it.materialYes || it.labourYes ? 1 : 0);
+        totals.COL_AH += getNum(it.qty) || 1;
       }
-      // Brass Nuts
-      else if (label === '17' && desc.includes('nut')) {
+      // 16: Brass Nut (AI: 12mm, AJ: 20mm, AK: 30mm)
+      else if ((label === '16' && !desc.includes('washer')) || (desc.includes('brass nut') && !desc.includes('washer'))) {
         totals.COL_AI += getNum(sq['12MM']) || getNum(sq['12 mm']);
         totals.COL_AJ += getNum(sq['20MM']) || getNum(sq['20 mm']);
         totals.COL_AK += getNum(sq['30MM']) || getNum(sq['30 mm']);
       }
-      // Brass Washers
-      else if (label === '17' && desc.includes('washer')) {
+      // 17: Brass Washer (AL: 12mm, AM: 20mm, AN: 30mm)
+      else if (label === '17' || desc.includes('brass washer')) {
         totals.COL_AL += getNum(sq['12MM']) || getNum(sq['12 mm']);
         totals.COL_AM += getNum(sq['20MM']) || getNum(sq['20 mm']);
         totals.COL_AN += getNum(sq['30MM']) || getNum(sq['30 mm']);
       }
-      // Combined Brass Nuts and Washers row
-      else if (label === '17' || desc.includes('brass nut') || desc.includes('brass washer')) {
-        totals.COL_AI += getNum(sq['12MM']) || getNum(sq['12 mm']);
-        totals.COL_AJ += getNum(sq['20MM']) || getNum(sq['20 mm']);
-        totals.COL_AK += getNum(sq['30MM']) || getNum(sq['30 mm']);
-        totals.COL_AL += getNum(sq['12MM']) || getNum(sq['12 mm']);
-        totals.COL_AM += getNum(sq['20MM']) || getNum(sq['20 mm']);
-        totals.COL_AN += getNum(sq['30MM']) || getNum(sq['30 mm']);
-      }
-      // Breather
+      // 18: Breather (AO: 500g)
       else if (label === '18' || desc.includes('breather')) {
-        totals.COL_AO += getNum(sq['500 gm']) || getNum(sq['500gm']) || getNum(it.qty);
-      }
-      // Half Stud
-      else if (label === '2' || desc.includes('half stud')) {
-        totals.COL_AP += getNum(sq['12MM']) || getNum(sq['12 mm']);
-        totals.COL_AQ += getNum(sq['20MM']) || getNum(sq['20 mm']);
-        if (!sq['12MM'] && !sq['20MM']) {
-          totals.COL_AP += getNum(it.qty);
-        }
+        totals.COL_AO += getNum(sq['500 gm']) || getNum(sq['500gm']) || getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
       }
     });
   });
