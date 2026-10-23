@@ -500,6 +500,10 @@ export interface DgvclBillCalculationResult {
   varianceAmount: number; // grandTotal - tenderTargetAmount
 }
 
+export function getDgvclBillItemId(item: DgvclSorRowDef, index: number): string {
+  return `dgvcl-item-${item.srNo.replace(/\./g, '_')}-${index}`;
+}
+
 /**
  * Calculates item quantities directly from performa records matching the 43-column canonical layout
  */
@@ -613,7 +617,7 @@ export function extractInventoryColumnQuantities(performas: PerformaRecord[]): R
       }
       // 7: Oil leakage
       else if (label === '7' || desc.includes('oil leakage') || desc.includes('topping of oil')) {
-        totals.COL_U += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
+        totals.COL_U += it.materialYes || it.labourYes ? 1 : getNum(it.qty);
         totals.COL_V += getNum(sq['Ltr']) || getNum(sq['ltr']);
       }
       // 8: Measurement of Voltage and Ampere
@@ -712,6 +716,7 @@ export function calculateDgvclBillFromInventory(
     contractorName?: string;
     workOrderRef?: string;
     customRates?: Record<string, number>;
+    quantityOverrides?: Record<string, number>;
   }
 ): DgvclBillCalculationResult {
   const tenderTargetAmount = options?.tenderTargetAmount ?? 2000000;
@@ -722,8 +727,12 @@ export function calculateDgvclBillFromInventory(
   const colTotals = extractInventoryColumnQuantities(performas);
 
   // Helper to resolve quantity for an SOR row
-  const getQtyForSorItem = (itemDef: DgvclSorRowDef): number => {
+  const getQtyForSorItem = (itemDef: DgvclSorRowDef, itemId: string): number => {
     if (itemDef.isHeader) return 0;
+    const quantityOverride = options?.quantityOverrides?.[itemId];
+    if (quantityOverride !== undefined && Number.isFinite(quantityOverride)) {
+      return Math.max(0, quantityOverride);
+    }
     switch (itemDef.inventorySource) {
       case 'COL_G': return colTotals.COL_G;
       case 'COL_H': return colTotals.COL_H;
@@ -783,12 +792,13 @@ export function calculateDgvclBillFromInventory(
   let page2RunningTotal = 0;
 
   DGVCL_SOR_SCHEDULE.forEach((sorDef, idx) => {
-    const rate = options?.customRates?.[sorDef.srNo] ?? sorDef.rate;
-    const qty = getQtyForSorItem(sorDef);
+    const itemId = getDgvclBillItemId(sorDef, idx);
+    const rate = options?.customRates?.[itemId] ?? options?.customRates?.[sorDef.srNo] ?? sorDef.rate;
+    const qty = getQtyForSorItem(sorDef, itemId);
     const amount = sorDef.isHeader ? 0 : Math.round(qty * rate);
 
     const billItem: BillItem = {
-      id: `dgvcl-item-${sorDef.srNo.replace(/\./g, '_')}-${idx}`,
+      id: itemId,
       srNo: idx + 1,
       description: sorDef.description,
       unit: sorDef.unit,
@@ -837,6 +847,8 @@ export function calculateDgvclBillFromInventory(
     contractorName: options?.contractorName || 'SHIV ELECTRICALS - DGVCL AUTHORIZED CONTRACTOR',
     workOrderRef: options?.workOrderRef || `WO/DGVCL/${cleanLoc.slice(0, 3).toUpperCase()}/RA-2/${year}`,
     items: allBillItems,
+    customRates: options?.customRates || {},
+    quantityOverrides: options?.quantityOverrides || {},
     subTotal: workDoneTotalA,
     taxGst,
     grandTotal,

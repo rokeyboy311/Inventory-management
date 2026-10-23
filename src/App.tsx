@@ -78,6 +78,7 @@ import { ImportSummaryModal } from './components/ImportSummaryModal';
 import { DraftRecoveryBanner } from './components/DraftRecoveryBanner';
 import { CreateLocationModal } from './components/CreateLocationModal';
 import { ExcelDataTable } from './components/ExcelDataTable';
+import { FastInventoryEntry } from './components/FastInventoryEntry';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { PWAInstallModal } from './components/PWAInstallModal';
 import { ExportReferenceModal } from './components/ExportReferenceModal';
@@ -112,7 +113,7 @@ export function App() {
   const [activeSheetName, setActiveSheetName] = useState<string>('inventory');
 
   // Main view tab: 'form' (A4 document) vs 'table' (Excel sheet data table) vs 'files' (Mobile sidebar)
-  const [mainViewTab, setMainViewTab] = useState<'form' | 'table' | 'files'>('form');
+  const [mainViewTab, setMainViewTab] = useState<'form' | 'fast' | 'table' | 'files'>('form');
 
   // Modals
   const [isCreateLocationModalOpen, setIsCreateLocationModalOpen] = useState(false);
@@ -491,6 +492,7 @@ export function App() {
   // Action: + Add New Performa
   const handleStartNewPerforma = () => {
     if (!activeWorkbook) return;
+    const nextEntryMode = mainViewTab === 'fast' ? 'fast' : 'form';
     const nextId = getNextPerformaId(activePerformas, activeWorkbook.locationName);
     const fresh = createBlankPerforma(nextId, activeWorkbook.locationName, currentPerforma.date, activeWorkbook.locationId);
     setCurrentPerforma(fresh);
@@ -498,7 +500,7 @@ export function App() {
     setDuplicateError(null);
     initHistory(fresh);
     setViewMode('edit');
-    setMainViewTab('form');
+    setMainViewTab(nextEntryMode);
     showNotification(`New blank performa created: ${nextId}`);
   };
 
@@ -893,6 +895,7 @@ export function App() {
         {isBillSheet ? (
           // Sheet 2: Bill Viewer (automatically populated with materials added in inventory)
           <BillSheetViewer
+            key={activeWorkbook?.locationId}
             billData={activeWorkbook?.sheets['bill']?.billData || createDefaultBillSheet(activeWorkbook?.locationName || 'Location')}
             locationName={activeWorkbook?.locationName || 'Location'}
             locationId={activeWorkbook?.locationId}
@@ -927,6 +930,20 @@ export function App() {
                   <span>A4 Performa Form</span>
                 </button>
                 <button
+                  onClick={() => {
+                    setMainViewTab('fast');
+                    setViewMode('edit');
+                  }}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    mainViewTab === 'fast'
+                      ? 'bg-cyan-600 text-white shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Fast Entry</span>
+                </button>
+                <button
                   onClick={() => setMainViewTab('table')}
                   className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
                     mainViewTab === 'table'
@@ -951,7 +968,7 @@ export function App() {
                 </button>
 
                 {/* Save Current */}
-                {mainViewTab === 'form' && (
+                {mainViewTab !== 'table' && (
                   <>
                     <button
                       onClick={handleSaveAndClose}
@@ -960,6 +977,15 @@ export function App() {
                       <Save className="w-3.5 h-3.5" />
                       <span>Save</span>
                     </button>
+                    {mainViewTab === 'fast' && (
+                      <button
+                        onClick={handleSaveAndAddAnother}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1.5 transition-all"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>Save &amp; Next</span>
+                      </button>
+                    )}
 
                     {/* Delete Entry (if editing) */}
                     {originalEditingId && (
@@ -994,6 +1020,14 @@ export function App() {
                 duplicateError={duplicateError}
                 onClearDuplicateError={() => setDuplicateError(null)}
                 viewMode={viewMode}
+              />
+            ) : mainViewTab === 'fast' ? (
+              <FastInventoryEntry
+                performa={currentPerforma}
+                rowNumber={currentIndex >= 0 ? currentIndex + 1 : activePerformas.length + 1}
+                duplicateError={duplicateError}
+                onChange={handlePerformaChange}
+                onSaveAndNext={handleSaveAndAddAnother}
               />
             ) : (
               <ExcelDataTable
@@ -1052,4 +1086,3 @@ export function App() {
 }
 
 export default App;
-

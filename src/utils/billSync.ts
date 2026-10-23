@@ -18,14 +18,8 @@ export function syncBillFromInventory(
   const tenderTarget = existingBill?.tenderTargetAmount || (locationId ? getTenderTargetForLocation(locationId) : 2000000);
   const tenderPercent = existingBill?.tenderPercentage || (locationId ? getTenderPercentForLocation(locationId) : 20);
 
-  const customRates: Record<string, number> = {};
-  if (existingBill?.items) {
-    existingBill.items.forEach(it => {
-      if (it.rate !== undefined) {
-        customRates[String(it.srNo)] = it.rate;
-      }
-    });
-  }
+  const customRates = existingBill?.customRates || {};
+  const quantityOverrides = existingBill?.quantityOverrides || {};
 
   const result = calculateDgvclBillFromInventory(performas, locationName, {
     tenderTargetAmount: tenderTarget,
@@ -34,7 +28,8 @@ export function syncBillFromInventory(
     billDate: existingBill?.billDate,
     contractorName: existingBill?.contractorName,
     workOrderRef: existingBill?.workOrderRef,
-    customRates
+    customRates,
+    quantityOverrides
   });
 
   return result.billData;

@@ -5,7 +5,11 @@ import {
   createBlankPerforma, 
   isNonZeroQtyValue 
 } from '../types/performa';
-import { calculateDgvclBillFromInventory } from './dgvclBillEngine';
+import {
+  calculateDgvclBillFromInventory,
+  DGVCL_SOR_SCHEDULE,
+  getDgvclBillItemId
+} from './dgvclBillEngine';
 
 export interface InventoryImportResult {
   performas: PerformaRecord[];
@@ -16,6 +20,7 @@ export interface InventoryImportResult {
 
 export interface BillImportResult {
   customRates: Record<string, number>;
+  billQuantities: Record<string, number>;
   tenderPercentage: number;
   tenderTargetAmount: number;
   contractorName?: string;
@@ -121,6 +126,7 @@ export async function parseInventoryExcelFile(
 
   const performas: PerformaRecord[] = [];
   const warnings: string[] = [];
+  let previousDate = '';
 
   for (let r = dataStartRow; r < rawRows.length; r++) {
     const row = rawRows[r];
@@ -144,7 +150,10 @@ export async function parseInventoryExcelFile(
     const rowLocation = col2 || detectedLoc;
     
     const p = createBlankPerforma(pId, rowLocation);
-    p.date = normalizeDate(row[1]);
+    if (row[1]) {
+      previousDate = normalizeDate(row[1]);
+    }
+    p.date = previousDate || normalizeDate(row[1]);
     p.transformerSerialNo = String(row[3] || '').trim();
     p.transformerMake = String(row[4] || '').trim();
     p.capacity = String(row[5] || '').trim();
@@ -159,7 +168,7 @@ export async function parseInventoryExcelFile(
       if (sizeKey) {
         it.sizeQtys = it.sizeQtys || {};
         it.sizeQtys[sizeKey] = val;
-        it.qty = String(val);
+        it.qty = srLabel === '7' && sizeKey === 'Ltr' ? '1' : String(val);
       } else {
         it.qty = String(val);
       }
@@ -229,35 +238,38 @@ export async function parseBillExcelFile(file: File): Promise<BillImportResult> 
   const wb = XLSX.read(arrayBuffer, { type: 'array' });
   
   const customRates: Record<string, number> = {};
+  const billQuantities: Record<string, number> = {};
   let tenderPercentage = 20;
   let tenderTargetAmount = 2000000;
   let contractorName: string | undefined = undefined;
   let billNumber: string | undefined = undefined;
   const warnings: string[] = [];
 
-  // Check 'GST BILL' (Page 1)
-  const ws1 = wb.Sheets['GST BILL'] || wb.Sheets['BILL FORM-1'] || wb.Sheets[wb.SheetNames[0]];
-  if (ws1) {
-    for (let r = 9; r <= 50; r++) {
-      const sr = ws1['B' + r]?.v;
-      const rate = ws1['H' + r]?.v;
-      if (sr !== undefined && rate !== undefined && typeof rate === 'number' && rate > 0) {
-        customRates[String(sr)] = rate;
-      }
+  let page1Row = 9;
+  let page2Row = 10;
+  DGVCL_SOR_SCHEDULE.forEach((item, itemIndex) => {
+    const rowNumber = item.page === 1 ? page1Row++ : page2Row++;
+    const sheet = wb.Sheets[item.page === 1 ? 'GST BILL' : 'GST BILL 2'];
+    if (!sheet || item.isHeader) return;
+
+    const itemId = getDgvclBillItemId(item, itemIndex);
+    const rate = sheet[`H${rowNumber}`]?.v;
+    if (typeof rate === 'number' && Number.isFinite(rate)) {
+      customRates[itemId] = rate;
     }
-  }
+
+    const quantity = sheet[`E${rowNumber}`]?.v;
+    if (typeof quantity === 'number' && Number.isFinite(quantity)) {
+      billQuantities[itemId] = quantity;
+    } else if (typeof quantity === 'string' && quantity.trim()) {
+      const parsedQuantity = Number(quantity);
+      if (Number.isFinite(parsedQuantity)) billQuantities[itemId] = parsedQuantity;
+    }
+  });
 
   // Check 'GST BILL 2' (Page 2)
   const ws2 = wb.Sheets['GST BILL 2'] || wb.Sheets['BILL FORM-2'];
   if (ws2) {
-    for (let r = 10; r <= 24; r++) {
-      const sr = ws2['B' + r]?.v;
-      const rate = ws2['H' + r]?.v;
-      if (sr !== undefined && rate !== undefined && typeof rate === 'number' && rate > 0) {
-        customRates[String(sr)] = rate;
-      }
-    }
-
     // Check Tender % in summary lines (e.g. Above 20 %)
     for (let r = 25; r <= 35; r++) {
       const txt = String(ws2['B' + r]?.v || '') + ' ' + String(ws2['H' + r]?.v || '');
@@ -280,6 +292,7 @@ export async function parseBillExcelFile(file: File): Promise<BillImportResult> 
 
   return {
     customRates,
+    billQuantities,
     tenderPercentage,
     tenderTargetAmount,
     contractorName,
@@ -305,6 +318,7 @@ export async function createLocationWorkbookFromExcelImport(options: {
   // 2. Parse Bill (if provided)
   let billResult: BillImportResult = {
     customRates: {},
+    billQuantities: {},
     tenderPercentage: 20,
     tenderTargetAmount: 2000000,
     warnings: []
@@ -324,13 +338,30 @@ export async function createLocationWorkbookFromExcelImport(options: {
   const workbookName = `${finalLocationName}.xlsx`;
 
   // 3. Compute DGVCL Bill Sheet directly from imported performas & custom rates
-  const billCalc = calculateDgvclBillFromInventory(invResult.performas, finalLocationName, {
+  const billOptions = {
     tenderTargetAmount: billResult.tenderTargetAmount,
     tenderPercentage: billResult.tenderPercentage,
     billNumber: billResult.billNumber,
     contractorName: billResult.contractorName,
     customRates: billResult.customRates
-  });
+  };
+  const calculatedBill = calculateDgvclBillFromInventory(
+    invResult.performas,
+    finalLocationName,
+    billOptions
+  );
+  const quantityOverrides = Object.fromEntries(
+    Object.entries(billResult.billQuantities).filter(([itemId, quantity]) => {
+      const calculatedQuantity = calculatedBill.billData.items.find(item => item.id === itemId)?.qty;
+      return calculatedQuantity !== undefined && calculatedQuantity !== quantity;
+    })
+  );
+  const billCalc = Object.keys(quantityOverrides).length > 0
+    ? calculateDgvclBillFromInventory(invResult.performas, finalLocationName, {
+      ...billOptions,
+      quantityOverrides
+    })
+    : calculatedBill;
 
   const nowIso = new Date().toISOString();
 

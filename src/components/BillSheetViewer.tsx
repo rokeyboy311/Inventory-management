@@ -47,7 +47,12 @@ export function BillSheetViewer({
   // Active Tab: 'page1' | 'page2' | 'all'
   const [activeTab, setActiveTab] = useState<'page1' | 'page2' | 'all'>('all');
   const [showSavedToast, setShowSavedToast] = useState(false);
-  const [customRates, setCustomRates] = useState<Record<string, number>>({});
+  const [customRates, setCustomRates] = useState<Record<string, number>>(
+    () => billData.customRates || {}
+  );
+  const [quantityOverrides, setQuantityOverrides] = useState<Record<string, number>>(
+    () => billData.quantityOverrides || {}
+  );
 
   // Compute live authentic DGVCL bill based on performas, tender target, and custom rates
   const calcResult = useMemo(() => {
@@ -58,9 +63,10 @@ export function BillSheetViewer({
       billDate: billData.billDate,
       contractorName: billData.contractorName,
       workOrderRef: billData.workOrderRef,
-      customRates
+      customRates,
+      quantityOverrides
     });
-  }, [performas, locationName, tenderTarget, tenderPercent, billData, customRates]);
+  }, [performas, locationName, tenderTarget, tenderPercent, billData, customRates, quantityOverrides]);
 
   const bill = calcResult.billData;
 
@@ -80,8 +86,8 @@ export function BillSheetViewer({
     onUpdateBill(updated);
   };
 
-  const handleRateChange = (srNo: string, newRate: number) => {
-    const nextRates = { ...customRates, [srNo]: Math.max(0, newRate) };
+  const handleRateChange = (itemId: string, newRate: number) => {
+    const nextRates = { ...customRates, [itemId]: Math.max(0, newRate) };
     setCustomRates(nextRates);
     const updatedCalc = calculateDgvclBillFromInventory(performas, locationName, {
       tenderTargetAmount: tenderTarget,
@@ -90,7 +96,30 @@ export function BillSheetViewer({
       billDate: bill.billDate,
       contractorName: bill.contractorName,
       workOrderRef: bill.workOrderRef,
-      customRates: nextRates
+      customRates: nextRates,
+      quantityOverrides
+    });
+    onUpdateBill(updatedCalc.billData);
+  };
+
+  const handleQuantityChange = (itemId: string, rawQuantity: string) => {
+    const nextOverrides = { ...quantityOverrides };
+    const quantity = Number(rawQuantity);
+    if (rawQuantity.trim() && Number.isFinite(quantity)) {
+      nextOverrides[itemId] = Math.max(0, quantity);
+    } else {
+      delete nextOverrides[itemId];
+    }
+    setQuantityOverrides(nextOverrides);
+    const updatedCalc = calculateDgvclBillFromInventory(performas, locationName, {
+      tenderTargetAmount: tenderTarget,
+      tenderPercentage: tenderPercent,
+      billNumber: bill.billNumber,
+      billDate: bill.billDate,
+      contractorName: bill.contractorName,
+      workOrderRef: bill.workOrderRef,
+      customRates,
+      quantityOverrides: nextOverrides
     });
     onUpdateBill(updatedCalc.billData);
   };
@@ -103,7 +132,8 @@ export function BillSheetViewer({
       billDate: bill.billDate,
       contractorName: bill.contractorName,
       workOrderRef: bill.workOrderRef,
-      customRates
+      customRates,
+      quantityOverrides
     });
     onUpdateBill(updatedCalc.billData);
     setShowSavedToast(true);
@@ -117,7 +147,8 @@ export function BillSheetViewer({
       setTenderTarget(2000000);
       const defaultCalc = calculateDgvclBillFromInventory(performas, locationName, {
         tenderTargetAmount: 2000000,
-        tenderPercentage: 20
+        tenderPercentage: 20,
+        quantityOverrides
       });
       onUpdateBill(defaultCalc.billData);
     }
@@ -482,7 +513,17 @@ export function BillSheetViewer({
                         -
                       </td>
                       <td className="py-1.5 px-2 text-center font-mono font-bold border-r border-slate-300 bg-amber-50/40 text-slate-900">
-                        {isHeader ? '' : item.qty}
+                        {isHeader ? '' : (
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.qty}
+                            onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                            aria-label={`Quantity for ${item.description}`}
+                            className="w-16 rounded border border-transparent bg-amber-50/40 px-1 py-0.5 text-center font-mono font-bold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
+                          />
+                        )}
                       </td>
                       <td className={`py-1.5 px-3 border-r border-slate-300 ${isHeader ? 'font-bold text-slate-900' : 'text-slate-800'}`}>
                         {item.description}
@@ -493,7 +534,7 @@ export function BillSheetViewer({
                             type="number"
                             min="0"
                             value={item.rate}
-                            onChange={(e) => handleRateChange(String(item.srNo), parseFloat(e.target.value) || 0)}
+                            onChange={(e) => handleRateChange(item.id, parseFloat(e.target.value) || 0)}
                             className="w-16 text-right font-mono font-bold bg-slate-50 hover:bg-white focus:bg-white border border-transparent focus:border-blue-500 rounded px-1 py-0.5 outline-none"
                           />
                         )}
@@ -600,7 +641,17 @@ export function BillSheetViewer({
                         -
                       </td>
                       <td className="py-1.5 px-2 text-center font-mono font-bold border-r border-slate-300 bg-amber-50/40 text-slate-900">
-                        {isHeader ? '' : item.qty}
+                        {isHeader ? '' : (
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.qty}
+                            onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                            aria-label={`Quantity for ${item.description}`}
+                            className="w-16 rounded border border-transparent bg-amber-50/40 px-1 py-0.5 text-center font-mono font-bold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
+                          />
+                        )}
                       </td>
                       <td className={`py-1.5 px-3 border-r border-slate-300 ${isHeader ? 'font-bold text-slate-900' : 'text-slate-800'}`}>
                         {item.description}
@@ -611,7 +662,7 @@ export function BillSheetViewer({
                             type="number"
                             min="0"
                             value={item.rate}
-                            onChange={(e) => handleRateChange(String(item.srNo), parseFloat(e.target.value) || 0)}
+                            onChange={(e) => handleRateChange(item.id, parseFloat(e.target.value) || 0)}
                             className="w-16 text-right font-mono font-bold bg-slate-50 hover:bg-white focus:bg-white border border-transparent focus:border-blue-500 rounded px-1 py-0.5 outline-none"
                           />
                         )}

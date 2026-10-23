@@ -74,6 +74,8 @@ export interface BillSheetDefinition {
   // Authentic DGVCL tender budget tracking & schedule details
   tenderTargetAmount?: number; // e.g. 2000000 (20 Lakhs)
   tenderPercentage?: number;   // e.g. 20 (Above 20%)
+  customRates?: Record<string, number>;
+  quantityOverrides?: Record<string, number>;
   page1Total?: number;
   workDoneTotalA?: number;
   aboveTenderAmount?: number;

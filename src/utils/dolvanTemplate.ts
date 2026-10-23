@@ -382,6 +382,21 @@ export function mapPerformaToDolvanRow(
     return '';
   };
 
+  const getSizeQtyOrLegacy = (srLabel: string, sizeKey: string): number | string => {
+    const it = getRowBySr(srLabel);
+    if (!it) return '';
+    const sizeQty = getSizeQty(srLabel, sizeKey);
+    if (sizeQty !== '') return sizeQty;
+    if (it.sizeQtys && Object.values(it.sizeQtys).some(isNonZeroQtyValue)) return '';
+    return getSingleQty(srLabel);
+  };
+
+  const getOilLeakageQty = (): number | string => {
+    const it = getRowBySr('7');
+    if (!it || (!isNonZeroQtyValue(it.qty) && !it.materialYes && !it.labourYes)) return '';
+    return isNonZeroQtyValue(it.qty) ? parseVal(it.qty) : 1;
+  };
+
   const getCombinedSizesQty = (srLabel: string, sizeKeys: string[]): number | string => {
     const it = getRowBySr(srLabel);
     if (!it) return '';
@@ -419,7 +434,7 @@ export function mapPerformaToDolvanRow(
     getSingleQty('1.1'),                                                          // 6: Bushing goti HT
     getSingleQty('1'),                                                            // 7: Bushing goti LT
     getSizeQty('2.1', '100'),                                                     // 8: AL. Patta 100
-    getSizeQty('2.1', '200') || getSingleQty('2.1'),                              // 9: AL. Patta 200
+    getSizeQtyOrLegacy('2.1', '200'),                                             // 9: AL. Patta 200
     getSizeQty('2.1', '500'),                                                     // 10: AL. Patta 500
     getSingleQty('3'),                                                            // 11: Earth Connection
     getSizeQty('4', 'Nos.'),                                                      // 12: LT cable Nos.
@@ -430,8 +445,8 @@ export function mapPerformaToDolvanRow(
     getCombinedSizesQty('6.1', ['95', '120', '150']),                             // 17: Termination 150 (95/120/150)
     getSizeQty('6.2', '185') || getSingleQty('6.2'),                              // 18: Termination 185
     getSizeQty('6.2', '240') || getSizeQty('6', '240'),                           // 19: Termination 240
-    getSingleQty('7'),                                                            // 20: Oil leakage
-    getSingleQty('7') !== '' ? (parseVal(getRowBySr('7')?.qty) !== '' ? parseVal(getRowBySr('7')?.qty) : 0) : '', // 21: Oil Ltr (0 when checked without extra liters)
+    getOilLeakageQty(),                                                           // 20: Oil leakage
+    getSizeQty('7', 'Ltr') || (getOilLeakageQty() !== '' ? 0 : ''),                // 21: Oil Ltr (0 when checked without extra liters)
     ((Number(getSingleQty('9.1')) || 0) + (Number(getSingleQty('9.2')) || 0)) || getCombinedSizesQty('9.1', ['Up to 100 Amp', 'Above 100 Amp']) || getSingleQty('9'), // 22: Dist Box
     getSizeQty('10', '100Amp'),                                                   // 23: Kit-Kat 100
     getSizeQty('10', '200Amp'),                                                   // 24: Kit-Kat 200
@@ -452,7 +467,7 @@ export function mapPerformaToDolvanRow(
     getSizeQty('17', '30MM'),                                                     // 39: Brass Washer 30mm
     getSingleQty('18'),                                                           // 40: Breather
     getSizeQty('2', '12MM'),                                                      // 41: HALF STUD 12 MM
-    getSizeQty('2', '20MM') || getSingleQty('2')                                  // 42: HALF STUD 20 MM
+    getSizeQtyOrLegacy('2', '20MM')                                               // 42: HALF STUD 20 MM
   ];
 
   // Dynamically map custom columns
@@ -757,37 +772,39 @@ export function buildGstBillWorksheet(
 
     // Qty in This Bill (with formula if applicable)
     let qtyFormula: string | undefined = undefined;
-    if (rowNum === 9) qtyFormula = 'E10+E11';
-    else if (rowNum === 10) qtyFormula = `${safeInv}!$H$${invTotalRow}`;
-    else if (rowNum === 11) qtyFormula = `${safeInv}!$G$${invTotalRow}`;
-    else if (rowNum === 12) qtyFormula = `${safeInv}!$I$${invTotalRow}+${safeInv}!$J$${invTotalRow}`;
-    else if (rowNum === 13) qtyFormula = 'E12';
-    else if (rowNum === 14) qtyFormula = `${safeInv}!$K$${invTotalRow}`;
-    else if (rowNum === 15) qtyFormula = 'E14';
-    else if (rowNum === 16) qtyFormula = `${safeInv}!$L$${invTotalRow}`;
-    else if (rowNum === 17) qtyFormula = `${safeInv}!$M$${invTotalRow}`;
-    else if (rowNum === 18) qtyFormula = `${safeInv}!$P$${invTotalRow}`;
-    else if (rowNum === 19) qtyFormula = `${safeInv}!$Q$${invTotalRow}`;
-    else if (rowNum === 21) qtyFormula = `${safeInv}!$R$${invTotalRow}`;
-    else if (rowNum === 22) qtyFormula = `${safeInv}!$S$${invTotalRow}`;
-    else if (rowNum === 23) qtyFormula = `${safeInv}!$T$${invTotalRow}`;
-    else if (rowNum === 24) qtyFormula = 'E23+E22+E21+E19';
-    else if (rowNum === 26) qtyFormula = `${safeInv}!$U$${invTotalRow}`;
-    else if (rowNum === 30) qtyFormula = `${safeInv}!$W$${invTotalRow}`;
-    else if (rowNum === 32) qtyFormula = `${safeInv}!$X$${invTotalRow}`;
-    else if (rowNum === 33) qtyFormula = `${safeInv}!$Y$${invTotalRow}`;
-    else if (rowNum === 35) qtyFormula = `${safeInv}!$Z$${invTotalRow}`;
-    else if (rowNum === 36) qtyFormula = `${safeInv}!$AA$${invTotalRow}`;
-    else if (rowNum === 37) qtyFormula = `${safeInv}!$AB$${invTotalRow}`;
-    else if (rowNum === 38) qtyFormula = 'E35+E36+E37';
-    else if (rowNum === 40) qtyFormula = `${safeInv}!$AC$${invTotalRow}`;
-    else if (rowNum === 41) qtyFormula = `${safeInv}!$AD$${invTotalRow}`;
-    else if (rowNum === 42) qtyFormula = `${safeInv}!$AE$${invTotalRow}`;
-    else if (rowNum === 43) qtyFormula = `${safeInv}!$AF$${invTotalRow}`;
-    else if (rowNum === 44) qtyFormula = 'E43';
-    else if (rowNum === 45) qtyFormula = `${safeInv}!$AG$${invTotalRow}`;
-    else if (rowNum === 46) qtyFormula = `${safeInv}!$AH$${invTotalRow}`;
-    else if (rowNum === 49) qtyFormula = `${safeInv}!$AP$${invTotalRow}`;
+    if (calc.billData.quantityOverrides?.[item.id] === undefined) {
+      if (rowNum === 9) qtyFormula = 'E10+E11';
+      else if (rowNum === 10) qtyFormula = `${safeInv}!$H$${invTotalRow}`;
+      else if (rowNum === 11) qtyFormula = `${safeInv}!$G$${invTotalRow}`;
+      else if (rowNum === 12) qtyFormula = `${safeInv}!$I$${invTotalRow}+${safeInv}!$J$${invTotalRow}`;
+      else if (rowNum === 13) qtyFormula = 'E12';
+      else if (rowNum === 14) qtyFormula = `${safeInv}!$K$${invTotalRow}`;
+      else if (rowNum === 15) qtyFormula = 'E14';
+      else if (rowNum === 16) qtyFormula = `${safeInv}!$L$${invTotalRow}`;
+      else if (rowNum === 17) qtyFormula = `${safeInv}!$M$${invTotalRow}`;
+      else if (rowNum === 18) qtyFormula = `${safeInv}!$P$${invTotalRow}`;
+      else if (rowNum === 19) qtyFormula = `${safeInv}!$Q$${invTotalRow}`;
+      else if (rowNum === 21) qtyFormula = `${safeInv}!$R$${invTotalRow}`;
+      else if (rowNum === 22) qtyFormula = `${safeInv}!$S$${invTotalRow}`;
+      else if (rowNum === 23) qtyFormula = `${safeInv}!$T$${invTotalRow}`;
+      else if (rowNum === 24) qtyFormula = 'E23+E22+E21+E19';
+      else if (rowNum === 26) qtyFormula = `${safeInv}!$U$${invTotalRow}`;
+      else if (rowNum === 30) qtyFormula = `${safeInv}!$W$${invTotalRow}`;
+      else if (rowNum === 32) qtyFormula = `${safeInv}!$X$${invTotalRow}`;
+      else if (rowNum === 33) qtyFormula = `${safeInv}!$Y$${invTotalRow}`;
+      else if (rowNum === 35) qtyFormula = `${safeInv}!$Z$${invTotalRow}`;
+      else if (rowNum === 36) qtyFormula = `${safeInv}!$AA$${invTotalRow}`;
+      else if (rowNum === 37) qtyFormula = `${safeInv}!$AB$${invTotalRow}`;
+      else if (rowNum === 38) qtyFormula = 'E35+E36+E37';
+      else if (rowNum === 40) qtyFormula = `${safeInv}!$AC$${invTotalRow}`;
+      else if (rowNum === 41) qtyFormula = `${safeInv}!$AD$${invTotalRow}`;
+      else if (rowNum === 42) qtyFormula = `${safeInv}!$AE$${invTotalRow}`;
+      else if (rowNum === 43) qtyFormula = `${safeInv}!$AF$${invTotalRow}`;
+      else if (rowNum === 44) qtyFormula = 'E43';
+      else if (rowNum === 45) qtyFormula = `${safeInv}!$AG$${invTotalRow}`;
+      else if (rowNum === 46) qtyFormula = `${safeInv}!$AH$${invTotalRow}`;
+      else if (rowNum === 49) qtyFormula = `${safeInv}!$AP$${invTotalRow}`;
+    }
 
     setCell(r, 4, item.qty > 0 || qtyFormula ? item.qty : '', false, 'center', qtyFormula);
 
@@ -938,17 +955,18 @@ export function buildGstBill2Worksheet(
     setCell(r, 3, '', false, 'center');
 
     let qtyFormula: string | undefined = undefined;
-    if (rowNum === 10) qtyFormula = `${safeInv}!$AQ$${invTotalRow}`;
-    else if (rowNum === 11) qtyFormula = 'E10';
-    else if (rowNum === 13) qtyFormula = `${safeInv}!$AI$${invTotalRow}`;
-    else if (rowNum === 14) qtyFormula = `${safeInv}!$AJ$${invTotalRow}`;
-    else if (rowNum === 15) qtyFormula = `${safeInv}!$AK$${invTotalRow}`;
-    else if (rowNum === 16) qtyFormula = 'E15+E14+E13';
-    else if (rowNum === 17) qtyFormula = `${safeInv}!$AL$${invTotalRow}`;
-    else if (rowNum === 18) qtyFormula = `${safeInv}!$AM$${invTotalRow}`;
-    else if (rowNum === 20) qtyFormula = 'E17+E19+E18';
-    else if (rowNum === 23) qtyFormula = `${safeInv}!$AO$${invTotalRow}`;
-    else if (rowNum === 24) qtyFormula = 'E23';
+    if (calc.billData.quantityOverrides?.[item.id] === undefined) {
+      if (rowNum === 10) qtyFormula = `${safeInv}!$AQ$${invTotalRow}`;
+      else if (rowNum === 13) qtyFormula = `${safeInv}!$AI$${invTotalRow}`;
+      else if (rowNum === 14) qtyFormula = `${safeInv}!$AJ$${invTotalRow}`;
+      else if (rowNum === 15) qtyFormula = `${safeInv}!$AK$${invTotalRow}`;
+      else if (rowNum === 16) qtyFormula = 'E15+E14+E13';
+      else if (rowNum === 17) qtyFormula = `${safeInv}!$AL$${invTotalRow}`;
+      else if (rowNum === 18) qtyFormula = `${safeInv}!$AM$${invTotalRow}`;
+      else if (rowNum === 20) qtyFormula = 'E17+E19+E18';
+      else if (rowNum === 23) qtyFormula = `${safeInv}!$AO$${invTotalRow}`;
+      else if (rowNum === 24) qtyFormula = 'E23';
+    }
 
     setCell(r, 4, item.qty > 0 || qtyFormula ? item.qty : '', false, 'center', qtyFormula);
     setCell(r, 5, item.description, item.remarks === 'Category Header', 'left');
@@ -1098,7 +1116,9 @@ export function exportDualSheetLocationExcel(workbook: LocationWorkbook): string
     billNumber: workbook.sheets['bill']?.billData?.billNumber,
     billDate: workbook.sheets['bill']?.billData?.billDate,
     contractorName: workbook.sheets['bill']?.billData?.contractorName,
-    workOrderRef: workbook.sheets['bill']?.billData?.workOrderRef
+    workOrderRef: workbook.sheets['bill']?.billData?.workOrderRef,
+    customRates: workbook.sheets['bill']?.billData?.customRates,
+    quantityOverrides: workbook.sheets['bill']?.billData?.quantityOverrides
   });
 
   const lastInventoryRow = 4 + performas.length; // Row index of TOTAL row in Sheet 1
