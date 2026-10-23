@@ -14,12 +14,14 @@ import {
   RefreshCw,
   FileCheck,
   Sliders,
-  Target
+  Target,
+  UploadCloud
 } from 'lucide-react';
 import { LocationWorkbook } from '../../types/performa';
 import { exportDualSheetLocationExcel } from '../../utils/dolvanTemplate';
 import { SupabaseSettingsModal } from '../admin/SupabaseSettingsModal';
 import { ItemsSettingsModal } from '../ItemsSettingsModal';
+import { ImportLocationExcelModal } from '../ImportLocationExcelModal';
 import { getSupabaseSyncStatus } from '../../utils/supabaseClient';
 
 interface UserDashboardProps {
@@ -28,6 +30,7 @@ interface UserDashboardProps {
   onCreateLocationClick: () => void;
   onDeleteWorkbook: (locationId: string) => void;
   onRefreshData?: () => void;
+  onImportLocationWorkbook?: (workbook: LocationWorkbook, autoEnter: boolean) => void;
 }
 
 export function UserDashboard({
@@ -35,11 +38,13 @@ export function UserDashboard({
   onOpenWorkbook,
   onCreateLocationClick,
   onDeleteWorkbook,
-  onRefreshData
+  onRefreshData,
+  onImportLocationWorkbook
 }: UserDashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isItemsSettingsModalOpen, setIsItemsSettingsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedLocationForItems, setSelectedLocationForItems] = useState<string | undefined>(undefined);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -136,6 +141,17 @@ export function UserDashboard({
             <span className="hidden sm:inline">Supabase</span>
           </button>
 
+          {/* 📥 Import Excel Location Button */}
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 text-xs font-bold border border-emerald-500/30 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            title="Import existing DGVCL inventory & bill Excel files to create a location"
+          >
+            <UploadCloud className="w-4 h-4 text-emerald-400" />
+            <span>📥 Import Excel</span>
+          </button>
+
           {/* + Create Location Excel Button */}
           <button
             type="button"
@@ -165,6 +181,18 @@ export function UserDashboard({
         workbooks={workbooks}
         activeLocationId={selectedLocationForItems}
         onItemsUpdated={onRefreshData}
+      />
+
+      {/* Import Location Excel Modal */}
+      <ImportLocationExcelModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={(wb, autoEnter) => {
+          setIsImportModalOpen(false);
+          if (onImportLocationWorkbook) {
+            onImportLocationWorkbook(wb, autoEnter);
+          }
+        }}
       />
 
       {/* Main Container */}
@@ -240,14 +268,24 @@ export function UserDashboard({
               </p>
             </div>
             {!searchQuery && (
-              <button
-                type="button"
-                onClick={onCreateLocationClick}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 inline-flex items-center gap-2 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Create First Location</span>
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={onCreateLocationClick}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Create First Location</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-bold inline-flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <UploadCloud className="w-4 h-4 text-emerald-400" />
+                  <span>📥 Import Existing Excel</span>
+                </button>
+              </div>
             )}
           </div>
         ) : (

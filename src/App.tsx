@@ -310,6 +310,33 @@ export function App() {
   };
 
   // -------------------------------------------------------------
+  // Location Excel Import (Dual Sheets: inventory + bill)
+  // -------------------------------------------------------------
+  const handleImportLocationWorkbook = async (newWb: LocationWorkbook, autoEnter: boolean = true) => {
+    const updated = [...workbooks, newWb];
+    setWorkbooks(updated);
+    setActiveLocationId(newWb.locationId);
+    setActiveSheetName('inventory');
+    await saveWorkbookToStorage(newWb);
+
+    const inventorySheet = newWb.sheets['inventory'] || newWb.sheets['Performas'];
+    const performas = inventorySheet?.performas || [];
+
+    if (autoEnter) {
+      const nextId = getNextPerformaId(performas, newWb.locationName);
+      const blank = createBlankPerforma(nextId, newWb.locationName, undefined, newWb.locationId);
+      setCurrentPerforma(blank);
+      setOriginalEditingId(null);
+      initHistory(blank);
+      setIsWorkbookOpen(true);
+      setMainViewTab('form');
+      showNotification(`Location "${newWb.locationName}" imported with ${performas.length} records! Ready for entry #${performas.length + 1}.`);
+    } else {
+      showNotification(`Location "${newWb.locationName}" imported with ${performas.length} records! Click "Enter File (Sheet 1)" to start.`);
+    }
+  };
+
+  // -------------------------------------------------------------
   // Performa CRUD Operations
   // -------------------------------------------------------------
 
@@ -650,6 +677,7 @@ export function App() {
             showNotification('Location Excel deleted.');
           }}
           onRefreshData={reloadData}
+          onImportLocationWorkbook={handleImportLocationWorkbook}
         />
 
         {/* Create Location Modal */}

@@ -164,7 +164,9 @@ export const DEFAULT_PERFORMA_ITEMS_TEMPLATE: Omit<MaintenanceItemRow, 'id'>[] =
     unit: 'Nos.',
     materialYes: false,
     labourYes: false,
-    qty: ''
+    qty: '',
+    sizeFields: ['12MM', '20MM'],
+    sizeQtys: { '12MM': '', '20MM': '' }
   },
   {
     srNo: 2,
@@ -174,7 +176,9 @@ export const DEFAULT_PERFORMA_ITEMS_TEMPLATE: Omit<MaintenanceItemRow, 'id'>[] =
     unit: 'Nos.',
     materialYes: false,
     labourYes: false,
-    qty: ''
+    qty: '',
+    sizeFields: ['100', '200', '500'],
+    sizeQtys: { '100': '', '200': '', '500': '' }
   },
   // 5: SR 3
   {
