@@ -16,7 +16,6 @@ import {
   LayoutGrid,
   List,
   MapPin,
-  ArrowLeftRight
 } from 'lucide-react';
 
 interface ExcelDataTableProps {
@@ -57,6 +56,7 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
   const [viewLayout, setViewLayout] = useState<'cards' | 'table'>('table');
 
   const orderedPerformas = sortPerformasBySequence(performas);
+  const inventoryColumnWidthTotal = DOLVAN_SHEET1_COLUMNS.reduce((sum, column) => sum + column.width, 0) + 11;
   const filtered = orderedPerformas.filter(p => {
     const q = searchTerm.toLowerCase();
     return (
@@ -261,48 +261,42 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
         </div>
       ) : (
         /* Full Data Table View */
-        <div className="w-full max-w-full min-w-0 border border-slate-200 rounded-lg overflow-hidden">
-          {/* Mobile swipe helper */}
-          <div className="flex items-center justify-between text-[11px] text-blue-700 bg-blue-50 px-2.5 py-1.5 border-b border-blue-200 md:hidden">
-            <span className="flex items-center gap-1 font-medium">
-              <ArrowLeftRight className="w-3.5 h-3.5 animate-pulse text-blue-600" /> 
-              Swipe horizontally to see all columns
-            </span>
-            <span className="font-bold text-slate-600">{filtered.length} rows</span>
-          </div>
-
-          <div className="w-full max-w-full min-w-0 overflow-x-auto">
-            <table className="w-max min-w-full border-collapse text-xs">
+        <div className="w-full max-w-full min-w-0 border border-slate-200 rounded-lg">
+          <div className="w-full max-w-full min-w-0">
+            <table className="w-full table-fixed border-collapse text-[7px] sm:text-[9px]">
               <colgroup>
                 {DOLVAN_SHEET1_COLUMNS.map(column => (
-                  <col key={column.key} style={{ width: `${Math.max(56, column.width * 10)}px` }} />
+                  <col
+                    key={column.key}
+                    style={{ width: `${(column.width / inventoryColumnWidthTotal) * 100}%` }}
+                  />
                 ))}
-                <col style={{ width: '110px' }} />
+                <col style={{ width: `${(11 / inventoryColumnWidthTotal) * 100}%` }} />
               </colgroup>
               <thead>
-                <tr className="bg-slate-100 text-slate-700 text-[10px] font-bold">
+                <tr className="bg-slate-100 text-slate-700 text-[7px] font-bold sm:text-[9px]">
                   {DOLVAN_SHEET1_COLUMNS.slice(0, 6).map(column => (
-                    <th key={column.key} rowSpan={3} className="border border-slate-300 px-1 py-2 text-center">
+                    <th key={column.key} rowSpan={3} className="break-words border border-slate-300 px-0.5 py-1 text-center leading-tight">
                       {column.header1}
                     </th>
                   ))}
                   {inventoryHeaderGroups[0].filter(group => group.start >= 6).map(group => (
-                    <th key={`h1-${group.start}`} colSpan={group.span} className="border border-slate-300 px-1 py-2 text-center">
+                    <th key={`h1-${group.start}`} colSpan={group.span} className="break-words border border-slate-300 px-0.5 py-1 text-center leading-tight">
                       {group.label}
                     </th>
                   ))}
-                  <th rowSpan={3} className="border border-slate-300 px-2 py-2 text-center">Actions</th>
+                  <th rowSpan={3} className="break-words border border-slate-300 px-0.5 py-1 text-center leading-tight">Actions</th>
                 </tr>
-                <tr className="bg-slate-50 text-slate-700 text-[10px] font-semibold">
+                <tr className="bg-slate-50 text-slate-700 text-[7px] font-semibold sm:text-[9px]">
                   {inventoryHeaderGroups[1].filter(group => group.start >= 6).map(group => (
-                    <th key={`h2-${group.start}`} colSpan={group.span} className="border border-slate-300 px-1 py-1 text-center">
+                    <th key={`h2-${group.start}`} colSpan={group.span} className="break-words border border-slate-300 px-0.5 py-1 text-center leading-tight">
                       {group.label}
                     </th>
                   ))}
                 </tr>
-                <tr className="bg-slate-50 text-slate-700 text-[10px] font-semibold">
+                <tr className="bg-slate-50 text-slate-700 text-[7px] font-semibold sm:text-[9px]">
                   {DOLVAN_SHEET1_COLUMNS.slice(6).map(column => (
-                    <th key={column.key} className="border border-slate-300 px-1 py-1 text-center">
+                    <th key={column.key} className="break-words border border-slate-300 px-0.5 py-1 text-center leading-tight">
                       {column.header3}
                     </th>
                   ))}
@@ -321,31 +315,32 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
                       {mapPerformaToDolvanRow(p, index).map((value, columnIndex) => (
                         <td
                           key={DOLVAN_SHEET1_COLUMNS[columnIndex].key}
-                          className={`border border-slate-200 px-1 py-1.5 text-center ${
+                          className={`break-words border border-slate-200 px-0.5 py-1 text-center leading-tight ${
                             columnIndex === 0 ? 'bg-slate-50 font-bold' : ''
                           } ${columnIndex > 5 ? 'font-mono' : ''}`}
                         >
                           {value}
                         </td>
                       ))}
-                      <td className="border border-slate-200 px-2 py-1 text-center">
-                        <div className="flex items-center justify-center space-x-1.5">
+                      <td className="border border-slate-200 px-0.5 py-1 text-center">
+                        <div className="flex items-center justify-center gap-0.5">
                           <button
                             type="button"
                             onClick={() => onEditPerforma(p.id)}
-                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[11px] font-semibold flex items-center space-x-1 transition-colors cursor-pointer"
+                            className="rounded bg-blue-50 p-0.5 text-blue-700 hover:bg-blue-100"
                             title="Edit all fields in Performa A4 UI"
+                            aria-label={`Edit ${p.id}`}
                           >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Edit</span>
+                            <Edit3 className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
                             onClick={() => onDeletePerforma(p.id)}
-                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                            className="rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
                             title="Delete record"
+                            aria-label={`Delete ${p.id}`}
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
                       </td>
