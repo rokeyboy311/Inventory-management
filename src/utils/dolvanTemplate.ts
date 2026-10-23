@@ -10,6 +10,7 @@ import {
 } from '../types/performa';
 import { syncBillFromInventory } from './billSync';
 import { getMasterItemsList } from './itemsMaster';
+import { sortPerformasBySequence } from './idGenerator';
 import { 
   calculateDgvclBillFromInventory, 
   DgvclBillCalculationResult, 
@@ -525,12 +526,13 @@ export function buildDolvanSheet1Worksheet(
   locationId?: string
 ): XLSX.WorkSheet {
   const { columns: allColumns, merges } = getEffectiveDolvanColumns(locationId, performas);
+  const orderedPerformas = sortPerformasBySequence(performas);
 
   const headerRow1 = allColumns.map(c => c.header1);
   const headerRow2 = allColumns.map((c, i) => i < 6 ? '' : c.header2);
   const headerRow3 = allColumns.map((c, i) => i < 6 ? '' : c.header3);
 
-  const dataRows = performas.map((p, idx) => mapPerformaToDolvanRow(p, idx, allColumns));
+  const dataRows = orderedPerformas.map((p, idx) => mapPerformaToDolvanRow(p, idx, allColumns));
 
   // Compute Total Row
   const totalRow: (string | number)[] = ['TOTAL', '', '', '', '', ''];
@@ -557,6 +559,13 @@ export function buildDolvanSheet1Worksheet(
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
   const totalRowIdx = 3 + dataRows.length;
+  for (let c = 6; c < allColumns.length; c++) {
+    const cellRef = XLSX.utils.encode_cell({ r: totalRowIdx, c });
+    const column = XLSX.utils.encode_col(c);
+    const cell = ws[cellRef];
+    cell.f = `IF(COUNT(${column}4:${column}${totalRowIdx})=0,"",SUM(${column}4:${column}${totalRowIdx}))`;
+    cell.t = typeof totalRow[c] === 'number' ? 'n' : 'str';
+  }
   // Merge TOTAL across columns 0 to 5
   merges.push({ s: { r: totalRowIdx, c: 0 }, e: { r: totalRowIdx, c: 5 } });
 
@@ -652,7 +661,7 @@ export function buildDolvanSheet1Worksheet(
     { hpt: 135, hpx: 180 }, // tall rotated item titles matching Image 1
     { hpt: 20, hpx: 26 },   // SR numbers row
     { hpt: 20, hpx: 26 },   // sizes / sub-headers row
-    ...performas.map(() => ({ hpt: 19, hpx: 25 })), // data rows
+    ...orderedPerformas.map(() => ({ hpt: 19, hpx: 25 })), // data rows
     { hpt: 22, hpx: 29 }    // TOTAL row
   ];
   ws['!views'] = [{ showGridLines: true }];
@@ -690,7 +699,7 @@ export function buildGstBillWorksheet(
   const ws: XLSX.WorkSheet = {};
   const merges: XLSX.Range[] = [];
 
-  const safeInv = invSheetName.includes(' ') ? `'${invSheetName}'` : invSheetName;
+  const safeInv = `'${invSheetName.replace(/'/g, "''")}'`;
 
   // Row 2-7: Multi-row Headers
   const setCell = (r: number, c: number, v: any, bold: boolean = false, align: 'center' | 'left' | 'right' = 'center', f?: string) => {
@@ -773,10 +782,10 @@ export function buildGstBillWorksheet(
     // Qty in This Bill (with formula if applicable)
     let qtyFormula: string | undefined = undefined;
     if (calc.billData.quantityOverrides?.[item.id] === undefined) {
-      if (rowNum === 9) qtyFormula = 'E10+E11';
+      if (rowNum === 9) qtyFormula = 'SUM(E10:E11)';
       else if (rowNum === 10) qtyFormula = `${safeInv}!$H$${invTotalRow}`;
       else if (rowNum === 11) qtyFormula = `${safeInv}!$G$${invTotalRow}`;
-      else if (rowNum === 12) qtyFormula = `${safeInv}!$I$${invTotalRow}+${safeInv}!$J$${invTotalRow}`;
+      else if (rowNum === 12) qtyFormula = `SUM(${safeInv}!$I$${invTotalRow},${safeInv}!$J$${invTotalRow})`;
       else if (rowNum === 13) qtyFormula = 'E12';
       else if (rowNum === 14) qtyFormula = `${safeInv}!$K$${invTotalRow}`;
       else if (rowNum === 15) qtyFormula = 'E14';
@@ -787,7 +796,7 @@ export function buildGstBillWorksheet(
       else if (rowNum === 21) qtyFormula = `${safeInv}!$R$${invTotalRow}`;
       else if (rowNum === 22) qtyFormula = `${safeInv}!$S$${invTotalRow}`;
       else if (rowNum === 23) qtyFormula = `${safeInv}!$T$${invTotalRow}`;
-      else if (rowNum === 24) qtyFormula = 'E23+E22+E21+E19';
+      else if (rowNum === 24) qtyFormula = 'SUM(E19,E21:E23)';
       else if (rowNum === 26) qtyFormula = `${safeInv}!$U$${invTotalRow}`;
       else if (rowNum === 30) qtyFormula = `${safeInv}!$W$${invTotalRow}`;
       else if (rowNum === 32) qtyFormula = `${safeInv}!$X$${invTotalRow}`;
@@ -795,7 +804,7 @@ export function buildGstBillWorksheet(
       else if (rowNum === 35) qtyFormula = `${safeInv}!$Z$${invTotalRow}`;
       else if (rowNum === 36) qtyFormula = `${safeInv}!$AA$${invTotalRow}`;
       else if (rowNum === 37) qtyFormula = `${safeInv}!$AB$${invTotalRow}`;
-      else if (rowNum === 38) qtyFormula = 'E35+E36+E37';
+      else if (rowNum === 38) qtyFormula = 'SUM(E35:E37)';
       else if (rowNum === 40) qtyFormula = `${safeInv}!$AC$${invTotalRow}`;
       else if (rowNum === 41) qtyFormula = `${safeInv}!$AD$${invTotalRow}`;
       else if (rowNum === 42) qtyFormula = `${safeInv}!$AE$${invTotalRow}`;
@@ -815,7 +824,9 @@ export function buildGstBillWorksheet(
     setCell(r, 7, item.rate > 0 ? item.rate : '', false, 'right');
 
     // Amount = H{rowNum} * E{rowNum}
-    const amtFormula = item.rate > 0 ? `H${rowNum}*E${rowNum}` : undefined;
+    const amtFormula = item.rate > 0
+      ? `IF(E${rowNum}="","",IFERROR(H${rowNum}*E${rowNum},0))`
+      : undefined;
     setCell(r, 9, item.totalAmount > 0 || amtFormula ? item.totalAmount : '', true, 'right', amtFormula);
 
     // Remark
@@ -869,7 +880,7 @@ export function buildGstBill2Worksheet(
   const ws: XLSX.WorkSheet = {};
   const merges: XLSX.Range[] = [];
 
-  const safeInv = invSheetName.includes(' ') ? `'${invSheetName}'` : invSheetName;
+  const safeInv = `'${invSheetName.replace(/'/g, "''")}'`;
 
   const setCell = (r: number, c: number, v: any, bold: boolean = false, align: 'center' | 'left' | 'right' = 'center', f?: string) => {
     const addr = XLSX.utils.encode_cell({ r, c });
@@ -960,10 +971,10 @@ export function buildGstBill2Worksheet(
       else if (rowNum === 13) qtyFormula = `${safeInv}!$AI$${invTotalRow}`;
       else if (rowNum === 14) qtyFormula = `${safeInv}!$AJ$${invTotalRow}`;
       else if (rowNum === 15) qtyFormula = `${safeInv}!$AK$${invTotalRow}`;
-      else if (rowNum === 16) qtyFormula = 'E15+E14+E13';
+      else if (rowNum === 16) qtyFormula = 'SUM(E13:E15)';
       else if (rowNum === 17) qtyFormula = `${safeInv}!$AL$${invTotalRow}`;
       else if (rowNum === 18) qtyFormula = `${safeInv}!$AM$${invTotalRow}`;
-      else if (rowNum === 20) qtyFormula = 'E17+E19+E18';
+      else if (rowNum === 20) qtyFormula = 'SUM(E17:E19)';
       else if (rowNum === 23) qtyFormula = `${safeInv}!$AO$${invTotalRow}`;
       else if (rowNum === 24) qtyFormula = 'E23';
     }
@@ -972,7 +983,9 @@ export function buildGstBill2Worksheet(
     setCell(r, 5, item.description, item.remarks === 'Category Header', 'left');
     setCell(r, 7, item.rate > 0 ? item.rate : '', false, 'right');
 
-    const amtFormula = item.rate > 0 ? `H${rowNum}*E${rowNum}` : undefined;
+    const amtFormula = item.rate > 0
+      ? `IF(E${rowNum}="","",IFERROR(H${rowNum}*E${rowNum},0))`
+      : undefined;
     setCell(r, 9, item.totalAmount > 0 || amtFormula ? item.totalAmount : '', true, 'right', amtFormula);
   }
 
@@ -1001,7 +1014,7 @@ export function buildGstBill2Worksheet(
   merges.push({ s: { r: 26, c: 1 }, e: { r: 26, c: 6 } });
   setCell(26, 7, 'Net Total', true, 'right');
   merges.push({ s: { r: 26, c: 7 }, e: { r: 26, c: 9 } });
-  setCell(26, 10, calc.netTotal, true, 'right', 'K25+K26');
+  setCell(26, 10, calc.netTotal, true, 'right', 'SUM(K25:K26)');
   merges.push({ s: { r: 26, c: 10 }, e: { r: 26, c: 11 } });
 
   // Row 28: GST Extra (18%)

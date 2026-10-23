@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PerformaRecord } from '../types/performa';
+import { sortPerformasBySequence } from '../utils/idGenerator';
 import { 
   FileSpreadsheet, 
   Edit3, 
@@ -39,7 +40,8 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [viewLayout, setViewLayout] = useState<'cards' | 'table'>('table');
 
-  const filtered = performas.filter(p => {
+  const orderedPerformas = sortPerformasBySequence(performas);
+  const filtered = orderedPerformas.filter(p => {
     const q = searchTerm.toLowerCase();
     return (
       (p.id || '').toLowerCase().includes(q) ||
@@ -70,7 +72,7 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              {performas.length} performa rows saved • Continuous sequential ordering
+              Showing {filtered.length} of {performas.length} saved performas in sequence
             </p>
           </div>
         </div>
