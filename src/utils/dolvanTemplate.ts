@@ -767,6 +767,8 @@ export function buildGstBillWorksheet(
     for (let c = 1; c <= 11; c++) {
       setCell(r, c, '');
     }
+    setCell(r, 4, 0, false, 'center');
+    setCell(r, 9, 0, true, 'right');
     merges.push({ s: { r, c: 5 }, e: { r, c: 6 } });
 
     if (!item) continue;
@@ -815,7 +817,8 @@ export function buildGstBillWorksheet(
       else if (rowNum === 49) qtyFormula = `${safeInv}!$AP$${invTotalRow}`;
     }
 
-    setCell(r, 4, item.qty > 0 || qtyFormula ? item.qty : '', false, 'center', qtyFormula);
+    const safeQtyFormula = qtyFormula ? `IFERROR(N(${qtyFormula}),0)` : undefined;
+    setCell(r, 4, item.qty > 0 ? item.qty : 0, false, 'center', safeQtyFormula);
 
     // Description of Item
     setCell(r, 5, item.description, item.remarks === 'Category Header', 'left');
@@ -824,10 +827,8 @@ export function buildGstBillWorksheet(
     setCell(r, 7, item.rate > 0 ? item.rate : '', false, 'right');
 
     // Amount = H{rowNum} * E{rowNum}
-    const amtFormula = item.rate > 0
-      ? `IF(E${rowNum}="","",IFERROR(H${rowNum}*E${rowNum},0))`
-      : undefined;
-    setCell(r, 9, item.totalAmount > 0 || amtFormula ? item.totalAmount : '', true, 'right', amtFormula);
+    const amtFormula = item.rate > 0 ? `IFERROR(H${rowNum}*E${rowNum},0)` : undefined;
+    setCell(r, 9, item.totalAmount > 0 ? item.totalAmount : 0, true, 'right', amtFormula);
 
     // Remark
     setCell(r, 11, rowNum === 9 ? 'Full Rate recommended' : '', false, 'center');
@@ -956,6 +957,8 @@ export function buildGstBill2Worksheet(
   for (let r = 9; r <= 23; r++) {
     const item = items[r - 9];
     for (let c = 1; c <= 11; c++) setCell(r, c, '');
+    setCell(r, 4, 0, false, 'center');
+    setCell(r, 9, 0, true, 'right');
     merges.push({ s: { r, c: 5 }, e: { r, c: 6 } });
 
     if (!item) continue;
@@ -979,14 +982,13 @@ export function buildGstBill2Worksheet(
       else if (rowNum === 24) qtyFormula = 'E23';
     }
 
-    setCell(r, 4, item.qty > 0 || qtyFormula ? item.qty : '', false, 'center', qtyFormula);
+    const safeQtyFormula = qtyFormula ? `IFERROR(N(${qtyFormula}),0)` : undefined;
+    setCell(r, 4, item.qty > 0 ? item.qty : 0, false, 'center', safeQtyFormula);
     setCell(r, 5, item.description, item.remarks === 'Category Header', 'left');
     setCell(r, 7, item.rate > 0 ? item.rate : '', false, 'right');
 
-    const amtFormula = item.rate > 0
-      ? `IF(E${rowNum}="","",IFERROR(H${rowNum}*E${rowNum},0))`
-      : undefined;
-    setCell(r, 9, item.totalAmount > 0 || amtFormula ? item.totalAmount : '', true, 'right', amtFormula);
+    const amtFormula = item.rate > 0 ? `IFERROR(H${rowNum}*E${rowNum},0)` : undefined;
+    setCell(r, 9, item.totalAmount > 0 ? item.totalAmount : 0, true, 'right', amtFormula);
   }
 
   // Summary Rows 25 to 30 (r: 24 to 29)

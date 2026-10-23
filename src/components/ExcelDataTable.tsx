@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PerformaRecord } from '../types/performa';
 import { sortPerformasBySequence } from '../utils/idGenerator';
+import { DOLVAN_SHEET1_COLUMNS, mapPerformaToDolvanRow } from '../utils/dolvanTemplate';
 import { 
   FileSpreadsheet, 
   Edit3, 
@@ -28,6 +29,21 @@ interface ExcelDataTableProps {
   onExportExcel: () => void;
 }
 
+function groupInventoryHeaders(headerRow: number): Array<{ label: string; start: number; span: number }> {
+  const groups: Array<{ label: string; start: number; span: number }> = [];
+  DOLVAN_SHEET1_COLUMNS.forEach((column, index) => {
+    const label = headerRow === 0
+      ? column.header1
+      : headerRow === 1
+        ? column.header2
+        : column.header3;
+    const previous = groups[groups.length - 1];
+    if (previous && previous.label === label) previous.span += 1;
+    else groups.push({ label, start: index, span: 1 });
+  });
+  return groups;
+}
+
 export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
   workbookName,
   sheetName,
@@ -51,6 +67,7 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
       (p.date || '').includes(q)
     );
   });
+  const inventoryHeaderGroups = [0, 1].map(groupInventoryHeaders);
 
   const nextSrNo = performas.length + 1;
 
@@ -255,59 +272,63 @@ export const ExcelDataTable: React.FC<ExcelDataTableProps> = ({
           </div>
 
           <div className="w-full max-w-full min-w-0 overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs min-w-[780px]">
+            <table className="w-max min-w-full border-collapse text-xs">
+              <colgroup>
+                {DOLVAN_SHEET1_COLUMNS.map(column => (
+                  <col key={column.key} style={{ width: `${Math.max(56, column.width * 10)}px` }} />
+                ))}
+                <col style={{ width: '110px' }} />
+              </colgroup>
               <thead>
-                <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-2.5 px-3 border-r border-slate-200 w-12 text-center">Sr No</th>
-                  <th className="py-2.5 px-3 border-r border-slate-200">Performa ID</th>
-                  <th className="py-2.5 px-3 border-r border-slate-200">Date</th>
-                  <th className="py-2.5 px-3 border-r border-slate-200">Location</th>
-                  <th className="py-2.5 px-3 border-r border-slate-200">Make</th>
-                  <th className="py-2.5 px-3 border-r border-slate-200">Serial No</th>
-                  <th className="py-2.5 px-3 border-r border-slate-200">Capacity</th>
-                  <th className="py-2.5 px-3 border-r border-slate-200 text-center">Voltage (R-Y-B)</th>
-                  <th className="py-2.5 px-3 border-r border-slate-200 text-center">Ampere (R-Y-B-N)</th>
-                  <th className="py-2.5 px-3 text-center w-24">Actions</th>
+                <tr className="bg-slate-100 text-slate-700 text-[10px] font-bold">
+                  {DOLVAN_SHEET1_COLUMNS.slice(0, 6).map(column => (
+                    <th key={column.key} rowSpan={3} className="border border-slate-300 px-1 py-2 text-center">
+                      {column.header1}
+                    </th>
+                  ))}
+                  {inventoryHeaderGroups[0].filter(group => group.start >= 6).map(group => (
+                    <th key={`h1-${group.start}`} colSpan={group.span} className="border border-slate-300 px-1 py-2 text-center">
+                      {group.label}
+                    </th>
+                  ))}
+                  <th rowSpan={3} className="border border-slate-300 px-2 py-2 text-center">Actions</th>
+                </tr>
+                <tr className="bg-slate-50 text-slate-700 text-[10px] font-semibold">
+                  {inventoryHeaderGroups[1].filter(group => group.start >= 6).map(group => (
+                    <th key={`h2-${group.start}`} colSpan={group.span} className="border border-slate-300 px-1 py-1 text-center">
+                      {group.label}
+                    </th>
+                  ))}
+                </tr>
+                <tr className="bg-slate-50 text-slate-700 text-[10px] font-semibold">
+                  {DOLVAN_SHEET1_COLUMNS.slice(6).map(column => (
+                    <th key={column.key} className="border border-slate-300 px-1 py-1 text-center">
+                      {column.header3}
+                    </th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-400">
+                    <td colSpan={DOLVAN_SHEET1_COLUMNS.length + 1} className="py-8 text-center text-slate-400">
                       No records yet in this Excel workbook. Click "+ Add Performa" to start data entry.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((p, index) => (
-                    <tr key={p.id} className="hover:bg-blue-50/40 transition-colors">
-                      <td className="py-2 px-3 text-center font-bold text-slate-700 border-r border-slate-200 font-mono bg-slate-50/50">
-                        {index + 1}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 font-mono font-bold text-blue-700">
-                        {p.id}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-slate-600 font-mono">
-                        {p.date}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-slate-800 font-medium">
-                        {p.location}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-slate-700">
-                        {p.transformerMake || '—'}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 font-mono text-slate-700">
-                        {p.transformerSerialNo || '—'}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-slate-700">
-                        {p.capacity || '—'}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-center font-mono text-[11px] text-slate-600">
-                        {p.measurements?.voltageRN || '0'}/{p.measurements?.voltageYN || '0'}/{p.measurements?.voltageBN || '0'} V
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-center font-mono text-[11px] text-slate-600">
-                        {p.measurements?.ampereR || '0'}/{p.measurements?.ampereY || '0'}/{p.measurements?.ampereB || '0'}/{p.measurements?.ampereN || '0'} A
-                      </td>
-                      <td className="py-2 px-3 text-center">
+                    <tr key={p.id} className="hover:bg-blue-50/40">
+                      {mapPerformaToDolvanRow(p, index).map((value, columnIndex) => (
+                        <td
+                          key={DOLVAN_SHEET1_COLUMNS[columnIndex].key}
+                          className={`border border-slate-200 px-1 py-1.5 text-center ${
+                            columnIndex === 0 ? 'bg-slate-50 font-bold' : ''
+                          } ${columnIndex > 5 ? 'font-mono' : ''}`}
+                        >
+                          {value}
+                        </td>
+                      ))}
+                      <td className="border border-slate-200 px-2 py-1 text-center">
                         <div className="flex items-center justify-center space-x-1.5">
                           <button
                             type="button"
