@@ -27,7 +27,7 @@ const STANDARD_ITEM_RATES: Record<string, { rate: number; labourRate: number }> 
   '6.1': { rate: 160, labourRate: 80 },  // Term 95/120/150
   '6.2': { rate: 220, labourRate: 90 },  // Term 185
   '7': { rate: 180, labourRate: 50 },    // Oil leakage / top-up
-  '8': { rate: 0, labourRate: 100 },     // Voltage/Amp measurement
+  '8': { rate: 150, labourRate: 50 },    // Voltage/Amp measurement
   '9': { rate: 950, labourRate: 250 },   // Fixing new box
   '9.1': { rate: 850, labourRate: 200 }, // Replacement of new box up to 100 Amp
   '9.2': { rate: 950, labourRate: 250 }, // Replacement of new box above 100 Amp

@@ -157,7 +157,7 @@ export const DGVCL_SOR_SCHEDULE: DgvclSorRowDef[] = [
     unit: 'Per No.',
     description: 'Measurment of Volatage and Ampre',
     rate: 150,
-    inventorySource: 'ZERO'
+    inventorySource: 'COL_VOLTAGE_AMPERE'
   },
   {
     page: 1,
@@ -519,6 +519,7 @@ export function extractInventoryColumnQuantities(performas: PerformaRecord[]): R
     COL_R: 0,  // Termination 150
     COL_S: 0,  // Termination 185
     COL_T: 0,  // Termination 240
+    COL_VOLTAGE_AMPERE: 0, // Measurment of Volatage and Ampre
     COL_U: 0,  // Oil leakage check
     COL_V: 0,  // Oil ltr
     COL_W: 0,  // Dist box > 100 kva
@@ -551,6 +552,8 @@ export function extractInventoryColumnQuantities(performas: PerformaRecord[]): R
   };
 
   performas.forEach(p => {
+    let performaVoltageAmpQty = 0;
+
     (p.items || []).forEach(it => {
       const label = String(it.srLabel || it.srNo || '').trim();
       const desc = (it.description || '').toLowerCase();
@@ -613,6 +616,17 @@ export function extractInventoryColumnQuantities(performas: PerformaRecord[]): R
         totals.COL_U += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
         totals.COL_V += getNum(sq['Ltr']) || getNum(sq['ltr']);
       }
+      // 8: Measurement of Voltage and Ampere
+      else if (
+        label === '8' ||
+        desc.includes('measurement of voltage') ||
+        desc.includes('voltage and ampere') ||
+        desc.includes('voltage & ampere') ||
+        desc.includes('volatage') ||
+        desc.includes('ampre')
+      ) {
+        performaVoltageAmpQty += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
+      }
       // 9.2: Dist Box Above 100
       else if (label === '9.2' || desc.includes('box above 100') || (desc.includes('dist') && desc.includes('box') && desc.includes('above'))) {
         totals.COL_W += getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
@@ -663,6 +677,20 @@ export function extractInventoryColumnQuantities(performas: PerformaRecord[]): R
         totals.COL_AO += getNum(sq['500 gm']) || getNum(sq['500gm']) || getNum(it.qty) || (it.materialYes || it.labourYes ? 1 : 0);
       }
     });
+
+    // Check if measurement was entered in p.measurements even if item row wasn't explicitly filled
+    if (performaVoltageAmpQty === 0 && p.measurements) {
+      const m = p.measurements;
+      const hasReading = [
+        m.voltageRN, m.voltageYN, m.voltageBN, m.voltageRY, m.voltageYB, m.voltageBR,
+        m.ampereR, m.ampereY, m.ampereB, m.ampereN
+      ].some(val => isNonZeroQtyValue(val));
+      if (hasReading) {
+        performaVoltageAmpQty = 1;
+      }
+    }
+
+    totals.COL_VOLTAGE_AMPERE += performaVoltageAmpQty;
   });
 
   return totals;
@@ -712,6 +740,7 @@ export function calculateDgvclBillFromInventory(
       case 'COL_S': return colTotals.COL_S;
       case 'COL_T': return colTotals.COL_T;
       case 'LABOR_TERMINATION': return colTotals.COL_Q + colTotals.COL_R + colTotals.COL_S + colTotals.COL_T;
+      case 'COL_VOLTAGE_AMPERE': return colTotals.COL_VOLTAGE_AMPERE;
       case 'COL_U': return colTotals.COL_U;
       case 'COL_W': return colTotals.COL_W;
       case 'COL_X': return colTotals.COL_X;
